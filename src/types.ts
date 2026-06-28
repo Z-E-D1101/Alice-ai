@@ -126,6 +126,16 @@ export interface ChatSession {
   messages: Message[];
 }
 
+export interface SelfLearningItem {
+  id: string;
+  type: 'conversation' | 'task' | 'code_fix' | 'failure_healing';
+  title: string;
+  description: string;
+  details?: string;
+  timestamp: string;
+  status: 'learned' | 'reinforced' | 'healing_completed';
+}
+
 export interface AppDatabase {
   messages: Message[];
   sessions?: ChatSession[];
@@ -140,4 +150,5 @@ export interface AppDatabase {
   notes: { id: string; title: string; content: string; updatedAt: string }[];
   todos: { id: string; text: string; completed: boolean; createdAt: string }[];
   neuronEvents?: NeuronEvent[];
+  learnings?: SelfLearningItem[];
 }

@@ -39,8 +39,11 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { AppDatabase, Message, MemoryItem, CustomSkill, ScheduledTask, ToolDefinition, ToolLog } from './types.js';
 import { NeuronLive } from './components/NeuronLive.js';
+import { InteractiveNeuronNetwork } from './components/InteractiveNeuronNetwork.js';
 import { ThinkingStepsView } from './components/ThinkingStepsView.js';
 import { CustomProviderSettings } from './components/CustomProviderSettings.js';
+import ReactMarkdown from 'react-markdown';
+import { SyntaxHighlighter } from './components/SyntaxHighlighter.js';
 
 // Hardcoded matching list of 40 tools for rich instant client-side rendering & filtering
 const CLIENT_TOOLS: { name: string; description: string; category: 'memory' | 'utility' | 'text' | 'information' | 'creative'; parameters: { name: string; type: 'string' | 'number' | 'boolean'; description: string; required: boolean; defaultValue?: any }[] }[] = [
@@ -416,6 +419,7 @@ export default function App() {
   const [learningStep, setLearningStep] = useState<number>(0);
   const [learningLogs, setLearningLogs] = useState<string[]>([]);
   const [learningSimMode, setLearningSimMode] = useState<'standard' | 'healing'>('healing');
+  const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
   const [learningName, setLearningName] = useState<string>('DockerMonitor');
   const [learningDesc, setLearningDesc] = useState<string>('Intercepts container events and alerts on state transitions.');
   const [learningTrigger, setLearningTrigger] = useState<string>('docker status');
@@ -453,8 +457,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Scroll immediately
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [db?.messages]);
+    // Scroll again after a tiny delay to ensure proper DOM layout reflow
+    const timer = setTimeout(() => {
+      chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [db?.messages, chatSending]);
 
   useEffect(() => {
     cliBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -887,17 +897,36 @@ export default function App() {
           ]);
 
           try {
+            const finalTrigger = learningSimMode === 'healing' ? 'docker monitor' : learningTrigger;
             await fetch('/api/skills', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 name: learningName,
                 description: learningDesc,
-                triggerPrompt: learningSimMode === 'healing' ? 'docker monitor' : learningTrigger,
+                triggerPrompt: finalTrigger,
                 systemPrompt: learningSystem,
                 outputTemplate: ''
               })
             });
+
+            // Post self-learning lesson item
+            await fetch('/api/learnings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: learningSimMode === 'healing' ? 'failure_healing' : 'task',
+                title: learningSimMode === 'healing' ? `Auto-Healed & Registered ${learningName}` : `Synthesized Skill ${learningName}`,
+                description: learningSimMode === 'healing' 
+                  ? `Healed trigger overlap collision and registered safe identifier: "${finalTrigger}"` 
+                  : `Successfully compiled declarative custom skill core from pattern templates.`,
+                details: learningSimMode === 'healing'
+                  ? `Alice detected a trigger overlap collision between "${learningTrigger}" and system command prefixes. Invoked self-repair logic to adjust prefix to "${finalTrigger}" and deployed healed sandbox.`
+                  : `Alice scanned transcripts, mapped functional parameters, validated syntax models, and registered custom prompt trigger: "${learningTrigger}"`,
+                status: learningSimMode === 'healing' ? 'healing_completed' : 'learned'
+              })
+            });
+
             await fetchDb();
           } catch (err) {
             console.error("Failed to register synthesized skill:", err);
@@ -912,6 +941,24 @@ export default function App() {
   const handleDeleteSkill = async (id: string) => {
     try {
       await fetch(`/api/skills/${id}`, { method: 'DELETE' });
+      await fetchDb();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteLearning = async (id: string) => {
+    try {
+      await fetch(`/api/learnings/${id}`, { method: 'DELETE' });
+      await fetchDb();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleClearLearnings = async () => {
+    try {
+      await fetch('/api/learnings/clear', { method: 'POST' });
       await fetchDb();
     } catch (e) {
       console.error(e);
@@ -1526,8 +1573,54 @@ export default function App() {
                                     {m.role === 'model' && m.thinkingSteps && (
                                       <ThinkingStepsView steps={m.thinkingSteps} timeSec={m.thinkingTime} />
                                     )}
-                                    <div className="whitespace-pre-wrap leading-relaxed select-text font-normal text-xs sm:text-[13px]">
-                                      {m.content}
+                                    <div className="markdown-body select-text text-xs sm:text-[13px] leading-relaxed font-sans text-stone-200">
+                                      <ReactMarkdown
+                                        components={{
+                                          code({ node, className, children, ...props }) {
+                                            const match = /language-(\w+)/.exec(className || '');
+                                            const isInline = !match && !String(children).includes('\n');
+                                            return isInline ? (
+                                              <code className="px-1.5 py-0.5 bg-[#140f0c] text-amber-500 rounded font-mono text-xs border border-[#2d231d]/40" {...props}>
+                                                {children}
+                                              </code>
+                                            ) : (
+                                              <SyntaxHighlighter 
+                                                code={String(children).replace(/\n$/, '')} 
+                                                language={match ? match[1] : 'javascript'} 
+                                              />
+                                            );
+                                          },
+                                          p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed text-stone-200">{children}</p>,
+                                          ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-1 text-stone-300">{children}</ul>,
+                                          ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-1 text-stone-300">{children}</ol>,
+                                          li: ({ children }) => <li className="text-stone-300">{children}</li>,
+                                          h1: ({ children }) => <h1 className="text-base font-bold text-[#f5f5f4] mt-3 mb-1.5 font-mono uppercase tracking-wider">{children}</h1>,
+                                          h2: ({ children }) => <h2 className="text-sm font-bold text-[#f5f5f4] mt-2.5 mb-1 font-mono uppercase tracking-wide">{children}</h2>,
+                                          h3: ({ children }) => <h3 className="text-xs font-bold text-[#f5f5f4] mt-2 mb-1 font-mono uppercase">{children}</h3>,
+                                          blockquote: ({ children }) => (
+                                            <blockquote className="border-l-2 border-amber-600/60 pl-3 italic text-stone-400 my-2 bg-[#1b1512] py-1 pr-2 rounded-r">
+                                              {children}
+                                            </blockquote>
+                                          ),
+                                          table: ({ children }) => (
+                                            <div className="overflow-x-auto my-3 rounded-md border border-[#2d231d]">
+                                              <table className="w-full text-left text-xs text-stone-300 border-collapse">{children}</table>
+                                            </div>
+                                          ),
+                                          thead: ({ children }) => <thead className="bg-[#1a1411] text-stone-400 font-mono text-[10px] uppercase border-b border-[#2d231d]">{children}</thead>,
+                                          tbody: ({ children }) => <tbody className="divide-y divide-[#2d231d]">{children}</tbody>,
+                                          tr: ({ children }) => <tr>{children}</tr>,
+                                          th: ({ children }) => <th className="px-3 py-2 font-semibold">{children}</th>,
+                                          td: ({ children }) => <td className="px-3 py-2 text-stone-300 font-mono text-[11px]">{children}</td>,
+                                          a: ({ href, children }) => (
+                                            <a href={href} target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:underline">
+                                              {children}
+                                            </a>
+                                          ),
+                                        }}
+                                      >
+                                        {m.content || ''}
+                                      </ReactMarkdown>
                                     </div>
                                     {/* Render intercepts */}
                                     {m.toolCalls && m.toolCalls.map((tc, tcIdx) => (
@@ -1599,15 +1692,15 @@ export default function App() {
                   <NeuronLive events={db?.neuronEvents || []} onClearLogs={handleClearNeuronLogs} />
                   
                   {/* Left Column: User Persona Profile */}
-                  <div className="lg:col-span-4 bg-[#0b1121] rounded-md border border-slate-700/60 p-4 shadow-sm">
-                    <div className="flex items-center space-x-2 mb-3 border-b border-slate-700/60 pb-2">
-                      <User size={15} className="text-emerald-400" />
-                      <h3 className="font-semibold text-[10px] font-mono tracking-wide uppercase text-slate-300">USER_PROFILE_PERSONA</h3>
+                  <div className="lg:col-span-4 bg-[#140f0c] rounded-md border border-[#2d231d] p-4 shadow-sm">
+                    <div className="flex items-center space-x-2 mb-3 border-b border-[#2d231d] pb-2">
+                      <User size={15} className="text-amber-500" />
+                      <h3 className="font-semibold text-[10px] font-mono tracking-wide uppercase text-stone-300">USER_PROFILE_PERSONA</h3>
                     </div>
 
                     <div className="space-y-3 text-xs font-mono">
                       <div>
-                        <span className="text-slate-500 block uppercase text-[9px]">Name</span>
+                        <span className="text-stone-500 block uppercase text-[9px]">Name</span>
                         <input
                           type="text"
                           value={db?.profile.name || ''}
@@ -1621,12 +1714,12 @@ export default function App() {
                               body: JSON.stringify({ name: db?.profile.name })
                             });
                           }}
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2 py-1 mt-1 text-slate-200 focus:outline-none focus:border-emerald-500"
+                          className="w-full bg-[#100b08] border border-[#2d231d] rounded px-2 py-1 mt-1 text-stone-200 focus:outline-none focus:border-[#ea580c]/60"
                         />
                       </div>
 
                       <div>
-                        <span className="text-slate-500 block uppercase text-[9px]">Profession</span>
+                        <span className="text-stone-500 block uppercase text-[9px]">Profession</span>
                         <input
                           type="text"
                           value={db?.profile.profession || ''}
@@ -1640,12 +1733,12 @@ export default function App() {
                               body: JSON.stringify({ profession: db?.profile.profession })
                             });
                           }}
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2 py-1 mt-1 text-slate-200 focus:outline-none focus:border-emerald-500"
+                          className="w-full bg-[#100b08] border border-[#2d231d] rounded px-2 py-1 mt-1 text-stone-200 focus:outline-none focus:border-[#ea580c]/60"
                         />
                       </div>
 
                       <div>
-                        <span className="text-slate-500 block uppercase text-[9px]">Short Bio</span>
+                        <span className="text-stone-500 block uppercase text-[9px]">Short Bio</span>
                         <textarea
                           rows={3}
                           value={db?.profile.bio || ''}
@@ -1659,42 +1752,42 @@ export default function App() {
                               body: JSON.stringify({ bio: db?.profile.bio })
                             });
                           }}
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2 py-1 mt-1 text-slate-200 focus:outline-none focus:border-emerald-500 resize-none font-sans"
+                          className="w-full bg-[#100b08] border border-[#2d231d] rounded px-2 py-1 mt-1 text-stone-200 focus:outline-none focus:border-[#ea580c]/60 resize-none font-sans"
                         />
                       </div>
 
                       <div>
-                        <span className="text-slate-500 block uppercase text-[9px] mb-1">Extracted Habits</span>
+                        <span className="text-stone-500 block uppercase text-[9px] mb-1">Extracted Habits</span>
                         <div className="flex flex-wrap gap-1">
                           {db?.profile.habits.map((h, i) => (
-                            <span key={i} className="px-1.5 py-0.2 rounded text-[9px] bg-slate-900 text-emerald-400 border border-slate-800">{h}</span>
+                            <span key={i} className="px-1.5 py-0.2 rounded text-[9px] bg-[#1c1410] text-amber-500 border border-[#2d231d]">{h}</span>
                           ))}
                         </div>
                       </div>
 
                       <div>
-                        <span className="text-slate-500 block uppercase text-[9px] mb-1">Interests</span>
+                        <span className="text-stone-500 block uppercase text-[9px] mb-1">Interests</span>
                         <div className="flex flex-wrap gap-1">
                           {db?.profile.interests.map((int, i) => (
-                            <span key={i} className="px-1.5 py-0.2 rounded text-[9px] bg-slate-900 text-teal-400 border border-slate-800">{int}</span>
+                            <span key={i} className="px-1.5 py-0.2 rounded text-[9px] bg-[#1c1410] text-amber-500 border border-[#2d231d]">{int}</span>
                           ))}
                         </div>
                       </div>
 
-                      <div className="pt-2 text-[9px] text-slate-500 border-t border-slate-700/40">
+                      <div className="pt-2 text-[9px] text-stone-500 border-t border-[#2d231d]">
                         *Fields automatically sync and consolidate when the agent NLP models parse facts during conversation loops.
                       </div>
                     </div>
                   </div>
 
                   {/* Middle Column: Memory Ledger */}
-                  <div className="lg:col-span-4 flex flex-col bg-[#0b1121] rounded-md border border-slate-700/60 p-4 shadow-sm max-h-[520px]">
-                    <div className="flex items-center space-x-2 mb-3 border-b border-slate-700/60 pb-2 justify-between">
+                  <div className="lg:col-span-4 flex flex-col bg-[#140f0c] rounded-md border border-[#2d231d] p-4 shadow-sm max-h-[520px]">
+                    <div className="flex items-center space-x-2 mb-3 border-b border-[#2d231d] pb-2 justify-between">
                       <div className="flex items-center space-x-2">
-                        <Hash size={15} className="text-teal-400" />
-                        <h3 className="font-semibold text-[10px] font-mono tracking-wide uppercase text-slate-300">PERSISTENT_MEMORY_LEDGER</h3>
+                        <Hash size={15} className="text-amber-500" />
+                        <h3 className="font-semibold text-[10px] font-mono tracking-wide uppercase text-stone-300">PERSISTENT_MEMORY_LEDGER</h3>
                       </div>
-                      <span className="px-1.5 py-0.2 rounded text-[9px] bg-teal-950/60 text-teal-400 font-mono">{db?.memories.length || 0} ITEMS</span>
+                      <span className="px-1.5 py-0.2 rounded text-[9px] bg-amber-950/60 text-amber-400 font-mono">{db?.memories.length || 0} ITEMS</span>
                     </div>
 
                     {/* Quick Add Form */}
@@ -1705,37 +1798,37 @@ export default function App() {
                           placeholder="Inject factual log manually..."
                           value={newMemory}
                           onChange={(e) => setNewMemory(e.target.value)}
-                          className="flex-1 bg-[#0f172a] border border-slate-700/60 rounded px-2 py-1 text-xs focus:outline-none focus:border-teal-500"
+                          className="flex-1 bg-[#100b08] border border-[#2d231d] rounded px-2 py-1 text-xs text-stone-200 focus:outline-none focus:border-[#ea580c]/60"
                         />
                         <select
                           value={newMemoryCat}
                           onChange={(e) => setNewMemoryCat(e.target.value)}
-                          className="bg-[#0f172a] border border-slate-700/60 rounded px-1 text-[9px] font-mono"
+                          className="bg-[#100b08] border border-[#2d231d] rounded px-1 text-[9px] font-mono text-stone-300"
                         >
                           <option value="preference">Pref</option>
                           <option value="professional">Work</option>
                           <option value="personal">Pers</option>
                         </select>
-                        <button type="submit" className="px-2 bg-teal-600 hover:bg-teal-500 rounded text-xs text-white cursor-pointer"><Plus size={12} /></button>
+                        <button type="submit" className="px-2 bg-amber-600 hover:bg-amber-500 rounded text-xs text-white cursor-pointer"><Plus size={12} /></button>
                       </div>
                     </form>
 
                     {/* Memories list */}
                     <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
                       {db?.memories.map((m) => (
-                        <div key={m.id} className="p-2 bg-slate-900/40 border border-slate-800/60 rounded flex items-start justify-between group">
+                        <div key={m.id} className="p-2 bg-[#1c1410]/40 border border-[#2d231d]/60 rounded flex items-start justify-between group">
                           <div>
                             <span className={`text-[8px] uppercase px-1 py-0.2 rounded font-mono border ${
-                              m.category === 'preference' ? 'bg-indigo-950/40 text-indigo-400 border-indigo-500/20' :
-                              m.category === 'professional' ? 'bg-amber-950/40 text-amber-400 border-amber-500/20' :
-                              'bg-slate-950/40 text-slate-400 border-slate-800'
+                              m.category === 'preference' ? 'bg-amber-950/40 text-amber-500 border-amber-500/20' :
+                              m.category === 'professional' ? 'bg-orange-950/40 text-orange-400 border-orange-500/20' :
+                              'bg-stone-900/40 text-stone-400 border-stone-800'
                             }`}>{m.category}</span>
-                            <p className="text-xs text-slate-300 mt-1 leading-relaxed font-sans select-text">{m.text}</p>
-                            <span className="text-[8px] text-slate-500 block mt-0.5 font-mono">{m.timestamp.slice(0, 10)}</span>
+                            <p className="text-xs text-stone-300 mt-1 leading-relaxed font-sans select-text">{m.text}</p>
+                            <span className="text-[8px] text-stone-500 block mt-0.5 font-mono">{m.timestamp.slice(0, 10)}</span>
                           </div>
                           <button
                             onClick={() => handleDeleteMemory(m.id)}
-                            className="text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 cursor-pointer"
+                            className="text-stone-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 cursor-pointer"
                           >
                             <Trash2 size={11} />
                           </button>
@@ -1745,28 +1838,28 @@ export default function App() {
                   </div>
 
                   {/* Right Column: Skill Synthesizer */}
-                  <div className="lg:col-span-4 flex flex-col bg-[#0b1121] rounded-md border border-slate-700/60 p-4 shadow-sm max-h-[520px] overflow-y-auto custom-scrollbar">
-                    <div className="flex items-center space-x-2 mb-3 border-b border-slate-700/60 pb-2">
-                      <Layers size={15} className="text-indigo-400" />
-                      <h3 className="font-semibold text-[10px] font-mono tracking-wide uppercase text-slate-300">SYNTHESIZED_SKILL_CORES</h3>
+                  <div className="lg:col-span-4 flex flex-col bg-[#140f0c] rounded-md border border-[#2d231d] p-4 shadow-sm max-h-[520px] overflow-y-auto custom-scrollbar">
+                    <div className="flex items-center space-x-2 mb-3 border-b border-[#2d231d] pb-2">
+                      <Layers size={15} className="text-amber-500" />
+                      <h3 className="font-semibold text-[10px] font-mono tracking-wide uppercase text-stone-300">SYNTHESIZED_SKILL_CORES</h3>
                     </div>
 
                     {/* Skill List */}
-                    <div className="space-y-2 mb-3 border-b border-slate-700/40 pb-3">
+                    <div className="space-y-2 mb-3 border-b border-[#2d231d] pb-3">
                       {db?.skills.map((s) => (
-                        <div key={s.id} className="p-2.5 bg-slate-900/30 border border-slate-850 rounded">
-                          <div className="flex items-center justify-between border-b border-slate-800 pb-1 mb-1 font-mono text-xs">
-                            <span className="font-semibold text-slate-200">{s.name}</span>
-                            <button onClick={() => handleDeleteSkill(s.id)} className="text-slate-500 hover:text-rose-400 cursor-pointer"><Trash2 size={11} /></button>
+                        <div key={s.id} className="p-2.5 bg-[#1c1410]/30 border border-[#2d231d] rounded">
+                          <div className="flex items-center justify-between border-b border-[#2d231d] pb-1 mb-1 font-mono text-xs">
+                            <span className="font-semibold text-stone-200">{s.name}</span>
+                            <button onClick={() => handleDeleteSkill(s.id)} className="text-stone-500 hover:text-rose-400 cursor-pointer"><Trash2 size={11} /></button>
                           </div>
-                          <p className="text-[11px] text-slate-400 leading-normal font-sans">{s.description}</p>
-                          <div className="mt-1 text-[9px] font-mono text-emerald-400 bg-slate-950/80 px-1.5 py-0.2 rounded inline-block">Trigger: "{s.triggerPrompt}"</div>
+                          <p className="text-[11px] text-stone-400 leading-normal font-sans">{s.description}</p>
+                          <div className="mt-1 text-[9px] font-mono text-amber-500 bg-[#100b08]/80 px-1.5 py-0.2 rounded inline-block">Trigger: "{s.triggerPrompt}"</div>
                         </div>
                       ))}
                     </div>
 
                     {/* Create Skill Form */}
-                    <h4 className="text-[10px] font-mono font-semibold text-slate-400 uppercase mb-2 flex items-center"><Plus size={10} className="mr-0.5" /> Synthesize Custom Skill</h4>
+                    <h4 className="text-[10px] font-mono font-semibold text-stone-400 uppercase mb-2 flex items-center"><Plus size={10} className="mr-0.5" /> Synthesize Custom Skill</h4>
                     <form onSubmit={handleAddSkill} className="space-y-2 font-mono text-xs">
                       <div>
                         <input
@@ -1774,7 +1867,7 @@ export default function App() {
                           placeholder="Skill Name (e.g. CodeFormatter)"
                           value={newSkillName}
                           onChange={(e) => setNewSkillName(e.target.value)}
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-[#100b08] border border-[#2d231d] rounded px-2 py-1 text-xs text-stone-200 focus:outline-none focus:border-[#ea580c]/60"
                           required
                         />
                       </div>
@@ -1784,7 +1877,7 @@ export default function App() {
                           placeholder="Description (What it accomplishes)"
                           value={newSkillDesc}
                           onChange={(e) => setNewSkillDesc(e.target.value)}
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-[#100b08] border border-[#2d231d] rounded px-2 py-1 text-xs text-stone-200 focus:outline-none focus:border-[#ea580c]/60"
                           required
                         />
                       </div>
@@ -1794,7 +1887,7 @@ export default function App() {
                           placeholder="Trigger Keyword/Prompt"
                           value={newSkillTrigger}
                           onChange={(e) => setNewSkillTrigger(e.target.value)}
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-[#100b08] border border-[#2d231d] rounded px-2 py-1 text-xs text-stone-200 focus:outline-none focus:border-[#ea580c]/60"
                           required
                         />
                       </div>
@@ -1803,7 +1896,7 @@ export default function App() {
                           placeholder="Expert System Instruction Template for the LLM..."
                           value={newSkillSystem}
                           onChange={(e) => setNewSkillSystem(e.target.value)}
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 resize-none"
+                          className="w-full bg-[#100b08] border border-[#2d231d] rounded px-2 py-1 text-xs text-stone-200 focus:outline-none focus:border-[#ea580c]/60 resize-none"
                           rows={2}
                           required
                         />
@@ -1814,25 +1907,25 @@ export default function App() {
                           placeholder="Output markdown template (Optional)"
                           value={newSkillOutput}
                           onChange={(e) => setNewSkillOutput(e.target.value)}
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-[#100b08] border border-[#2d231d] rounded px-2 py-1 text-xs text-stone-200 focus:outline-none focus:border-[#ea580c]/60"
                         />
                       </div>
                       <button
                         type="submit"
-                        className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium transition-all cursor-pointer"
+                        className="w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded font-medium transition-all cursor-pointer"
                       >
                         SYNTHESIZE_SKILL_CORE
                       </button>
                     </form>
 
                     {/* Interactive Test Block */}
-                    <div className="mt-3 pt-3 border-t border-slate-700/40">
-                      <h4 className="text-[10px] font-mono font-semibold text-slate-400 uppercase mb-2 flex items-center"><Play size={10} className="mr-0.5" /> Core Test-Executor</h4>
+                    <div className="mt-3 pt-3 border-t border-[#2d231d]">
+                      <h4 className="text-[10px] font-mono font-semibold text-stone-400 uppercase mb-2 flex items-center"><Play size={10} className="mr-0.5" /> Core Test-Executor</h4>
                       <form onSubmit={handleRunSkillTest} className="space-y-1.5 text-xs font-mono">
                         <select
                           value={testSkillName}
                           onChange={(e) => setTestSkillName(e.target.value)}
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded p-1 text-slate-200"
+                          className="w-full bg-[#100b08] border border-[#2d231d] rounded p-1 text-stone-200"
                         >
                           <option value="">-- Choose synthesized skill --</option>
                           {db?.skills.map(s => (
@@ -1844,12 +1937,12 @@ export default function App() {
                           placeholder="Test payload contents..."
                           value={testSkillInput}
                           onChange={(e) => setTestSkillInput(e.target.value)}
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2 py-1 text-slate-200"
+                          className="w-full bg-[#100b08] border border-[#2d231d] rounded px-2 py-1 text-stone-200"
                         />
-                        <button type="submit" className="w-full py-1 bg-[#1e293b] hover:bg-slate-700 text-slate-250 border border-slate-700/60 rounded transition-all cursor-pointer">EXECUTE_SKILL_FLOW</button>
+                        <button type="submit" className="w-full py-1 bg-[#251d18] hover:bg-[#2d231d] text-stone-300 border border-[#2d231d] rounded transition-all cursor-pointer">EXECUTE_SKILL_FLOW</button>
                       </form>
                       {skillResult && (
-                        <pre className="mt-2 p-2 bg-slate-950 border border-slate-800 rounded text-[9px] text-emerald-400 whitespace-pre-wrap font-mono max-h-24 overflow-y-auto custom-scrollbar">{skillResult}</pre>
+                        <pre className="mt-2 p-2 bg-[#100b08] border border-[#2d231d] rounded text-[9px] text-amber-500 whitespace-pre-wrap font-mono max-h-24 overflow-y-auto custom-scrollbar">{skillResult}</pre>
                       )}
                     </div>
 
@@ -1863,7 +1956,7 @@ export default function App() {
                 <div className="flex flex-col h-full min-h-0">
                   
                   {/* Filter & Search Dashboard */}
-                  <div className="bg-[#0b1121] border border-slate-700/60 rounded-md p-3 mb-4 flex flex-col md:flex-row items-center justify-between gap-3 shadow-sm font-mono text-[11px]">
+                  <div className="bg-[#17120e] border border-[#2d231d] rounded-md p-3 mb-4 flex flex-col md:flex-row items-center justify-between gap-3 shadow-sm font-mono text-[11px]">
                     <div className="flex flex-wrap gap-1">
                       {['all', 'memory', 'utility', 'text', 'information', 'creative'].map(cat => (
                         <button
@@ -1871,8 +1964,8 @@ export default function App() {
                           onClick={() => setToolCatFilter(cat)}
                           className={`px-2 py-1 rounded-sm uppercase font-semibold text-[9px] border transition-all cursor-pointer ${
                             toolCatFilter === cat 
-                              ? 'bg-emerald-950/60 border-emerald-500/40 text-[#22c55e]' 
-                              : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                              ? 'bg-amber-950/60 border-amber-600/40 text-amber-450' 
+                              : 'bg-[#1c1410] border-[#2d231d] text-stone-400 hover:text-stone-200'
                           }`}
                         >
                           {cat}
@@ -1885,9 +1978,9 @@ export default function App() {
                         placeholder="Search 40 built-in tools..."
                         value={toolSearch}
                         onChange={(e) => setToolSearch(e.target.value)}
-                        className="w-full bg-[#0f172a] border border-slate-700/60 rounded pl-8 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                        className="w-full bg-[#1c1410] border border-[#2d231d] rounded pl-8 pr-3 py-1.5 text-xs text-stone-200 focus:outline-none focus:border-amber-600/40"
                       />
-                      <Search className="absolute left-2.5 top-2 text-slate-500" size={12} />
+                      <Search className="absolute left-2.5 top-2 text-stone-500" size={12} />
                     </div>
                   </div>
 
@@ -1897,20 +1990,20 @@ export default function App() {
                       <div
                         key={tool.name}
                         onClick={() => handleSelectTool(tool)}
-                        className={`p-3 bg-[#0b1121] border transition-all rounded-md hover:border-emerald-500/20 cursor-pointer group flex flex-col justify-between ${
-                          selectedTool?.name === tool.name ? 'border-emerald-500 bg-[#0d1525]' : 'border-slate-700/60'
+                        className={`p-3 bg-[#17120e] border transition-all rounded-md hover:border-amber-600/20 cursor-pointer group flex flex-col justify-between ${
+                          selectedTool?.name === tool.name ? 'border-amber-500 bg-[#1c1410]' : 'border-[#2d231d]'
                         }`}
                       >
                         <div>
-                          <div className="flex items-center justify-between border-b border-slate-800/40 pb-1.5 mb-1.5 font-mono text-xs">
-                            <span className="font-semibold text-slate-300 group-hover:text-emerald-400 transition-colors">[{tool.name}]</span>
-                            <span className="text-[8px] px-1 py-0.2 rounded bg-slate-900 text-slate-400 font-semibold uppercase">{tool.category}</span>
+                          <div className="flex items-center justify-between border-b border-[#2d231d]/40 pb-1.5 mb-1.5 font-mono text-xs">
+                            <span className="font-semibold text-stone-300 group-hover:text-amber-450 transition-colors">[{tool.name}]</span>
+                            <span className="text-[8px] px-1 py-0.2 rounded bg-[#1c1410] text-stone-400 font-semibold uppercase">{tool.category}</span>
                           </div>
-                          <p className="text-[11px] text-slate-400 leading-normal font-sans">{tool.description}</p>
+                          <p className="text-[11px] text-stone-400 leading-normal font-sans">{tool.description}</p>
                         </div>
-                        <div className="mt-3 flex items-center justify-between font-mono text-[9px] text-slate-500">
+                        <div className="mt-3 flex items-center justify-between font-mono text-[9px] text-stone-500">
                           <span>Params: {tool.parameters.length}</span>
-                          <span className="text-emerald-500/60 group-hover:translate-x-0.5 transition-transform inline-flex items-center">RUN <ChevronRight size={10} /></span>
+                          <span className="text-amber-500/60 group-hover:translate-x-0.5 transition-transform inline-flex items-center font-bold">RUN <ChevronRight size={10} /></span>
                         </div>
                       </div>
                     ))}
@@ -1925,39 +2018,39 @@ export default function App() {
                         exit={{ opacity: 0, scale: 0.98 }}
                         className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
                       >
-                        <div className="w-full max-w-2xl bg-[#0b1121] border border-slate-700/60 rounded-md shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+                        <div className="w-full max-w-2xl bg-[#17120e] border border-[#2d231d] rounded-md shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
                           {/* Overlay Head */}
-                          <div className="px-3.5 py-2.5 border-b border-slate-700/60 bg-slate-900 flex items-center justify-between font-mono text-xs">
+                          <div className="px-3.5 py-2.5 border-b border-[#2d231d] bg-[#140f0c] flex items-center justify-between font-mono text-xs">
                             <div className="flex items-center space-x-2">
-                              <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e]"></span>
-                              <span className="font-semibold text-slate-300 uppercase text-[10px]">EXECUTE_TOOL: [{selectedTool.name}]</span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_5px_#ea580c]"></span>
+                              <span className="font-semibold text-stone-300 uppercase text-[10px]">EXECUTE_TOOL: [{selectedTool.name}]</span>
                             </div>
-                            <button onClick={() => setSelectedTool(null)} className="text-slate-400 hover:text-slate-200 cursor-pointer text-[10px]">Close [X]</button>
+                            <button onClick={() => setSelectedTool(null)} className="text-stone-400 hover:text-stone-200 cursor-pointer text-[10px]">Close [X]</button>
                           </div>
 
                           {/* Overlay Body */}
                           <div className="p-4 overflow-y-auto space-y-3 flex-1 custom-scrollbar">
-                            <p className="text-[11px] text-slate-400 border-l-2 border-emerald-500 pl-2 leading-normal font-sans">{selectedTool.description}</p>
+                            <p className="text-[11px] text-stone-400 border-l-2 border-amber-500 pl-2 leading-normal font-sans">{selectedTool.description}</p>
 
                             {/* Dynamically generated form fields */}
                             {selectedTool.parameters.length > 0 ? (
                               <div className="space-y-2 pt-2 font-mono text-xs">
                                 {selectedTool.parameters.map((p: any) => (
                                   <div key={p.name}>
-                                    <label className="text-slate-400 block mb-0.5 uppercase text-[9px]">{p.name} {p.required && <span className="text-rose-400">*</span>}</label>
+                                    <label className="text-stone-400 block mb-0.5 uppercase text-[9px]">{p.name} {p.required && <span className="text-rose-400">*</span>}</label>
                                     {p.type === 'boolean' ? (
                                       <input
                                         type="checkbox"
                                         checked={toolParams[p.name] || false}
                                         onChange={(e) => setToolParams({ ...toolParams, [p.name]: e.target.checked })}
-                                        className="w-3.5 h-3.5 rounded bg-slate-900 border-slate-800 text-emerald-600 focus:ring-0 focus:ring-offset-0"
+                                        className="w-3.5 h-3.5 rounded bg-[#1c1410] border-[#2d231d] text-amber-600 focus:ring-0 focus:ring-offset-0"
                                       />
                                     ) : p.type === 'number' ? (
                                       <input
                                         type="number"
                                         value={toolParams[p.name] !== undefined ? toolParams[p.name] : ''}
                                         onChange={(e) => setToolParams({ ...toolParams, [p.name]: parseFloat(e.target.value) })}
-                                        className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                                        className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1.5 text-xs text-stone-200 focus:outline-none focus:border-amber-600/40"
                                         placeholder={p.description}
                                         required={p.required}
                                       />
@@ -1966,7 +2059,7 @@ export default function App() {
                                         rows={2}
                                         value={toolParams[p.name] || ''}
                                         onChange={(e) => setToolParams({ ...toolParams, [p.name]: e.target.value })}
-                                        className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none font-sans"
+                                        className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1.5 text-xs text-stone-200 focus:outline-none focus:border-amber-600/40 resize-none font-sans"
                                         placeholder={p.description}
                                         required={p.required}
                                       />
@@ -1975,14 +2068,14 @@ export default function App() {
                                 ))}
                               </div>
                             ) : (
-                              <div className="text-[10px] text-slate-500 font-mono italic p-2 bg-slate-950 border border-slate-900 rounded">This tool executes without any arguments.</div>
+                              <div className="text-[10px] text-stone-500 font-mono italic p-2 bg-[#100b08] border border-[#2d231d] rounded">This tool executes without any arguments.</div>
                             )}
 
                             {/* Execute button */}
                             <button
                               onClick={handleRunTool}
                               disabled={toolRunning}
-                              className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white font-bold font-mono text-[10px] rounded transition-all cursor-pointer flex items-center justify-center space-x-1.5"
+                              className="w-full py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-[#201813] text-white font-bold font-mono text-[10px] rounded transition-all cursor-pointer flex items-center justify-center space-x-1.5"
                             >
                               {toolRunning ? <RefreshCw className="animate-spin" size={12} /> : <Play size={12} />}
                               <span>RUN_MODULE_CORE</span>
@@ -1990,9 +2083,9 @@ export default function App() {
 
                             {/* Result Terminal */}
                             {toolResult && (
-                              <div className="pt-3 border-t border-slate-800">
-                                <span className="text-[9px] font-mono text-slate-400 block mb-0.5 uppercase">Output Stream Result:</span>
-                                <pre className="p-3 bg-slate-950 rounded border border-emerald-500/20 text-[11px] text-[#22c55e] font-mono whitespace-pre-wrap select-text max-h-52 overflow-y-auto shadow-inner custom-scrollbar">
+                              <div className="pt-3 border-t border-[#2d231d]">
+                                <span className="text-[9px] font-mono text-stone-400 block mb-0.5 uppercase">Output Stream Result:</span>
+                                <pre className="p-3 bg-[#100b08] rounded border border-amber-600/20 text-[11px] text-amber-400 font-mono whitespace-pre-wrap select-text max-h-52 overflow-y-auto shadow-inner custom-scrollbar">
                                   {toolResult}
                                 </pre>
                               </div>
@@ -2012,43 +2105,43 @@ export default function App() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full min-h-0">
                   
                   {/* Left Column: Schedules List */}
-                  <div className="lg:col-span-4 bg-[#0b1121] border border-slate-700/60 rounded-md p-4 shadow-sm max-h-[520px] overflow-y-auto custom-scrollbar">
-                    <div className="flex items-center space-x-2 mb-3 border-b border-slate-700/60 pb-2 justify-between">
+                  <div className="lg:col-span-4 bg-[#17120e] border border-[#2d231d] rounded-md p-4 shadow-sm max-h-[520px] overflow-y-auto custom-scrollbar">
+                    <div className="flex items-center space-x-2 mb-3 border-b border-[#2d231d] pb-2 justify-between">
                       <div className="flex items-center space-x-2">
-                        <Clock className="text-emerald-400" size={15} />
-                        <h3 className="font-semibold text-[10px] font-mono tracking-wide uppercase text-slate-300">AUTOMATION_ROUTINES</h3>
+                        <Clock className="text-amber-500" size={15} />
+                        <h3 className="font-semibold text-[10px] font-mono tracking-wide uppercase text-stone-300">AUTOMATION_ROUTINES</h3>
                       </div>
-                      <span className="text-[9px] bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded font-mono">CRONS</span>
+                      <span className="text-[9px] bg-[#1c1410] text-stone-400 px-1.5 py-0.5 rounded font-mono">CRONS</span>
                     </div>
 
                     <div className="space-y-3">
                       {db?.schedules.map((sc) => (
-                        <div key={sc.id} className={`p-3 bg-slate-900/60 border rounded-md transition-all ${sc.enabled ? 'border-slate-800' : 'border-slate-900 opacity-60'}`}>
-                          <div className="flex items-center justify-between border-b border-slate-800/60 pb-1.5 mb-1.5 font-mono text-xs">
-                            <span className="font-bold text-slate-200">{sc.title}</span>
+                        <div key={sc.id} className={`p-3 bg-[#1c1410]/60 border rounded-md transition-all ${sc.enabled ? 'border-[#2d231d]' : 'border-[#140f0c] opacity-60'}`}>
+                          <div className="flex items-center justify-between border-b border-[#2d231d]/40 pb-1.5 mb-1.5 font-mono text-xs">
+                            <span className="font-bold text-stone-200">{sc.title}</span>
                             <div className="flex items-center space-x-1.5">
-                              <span className={`text-[8px] px-1 py-0.2 rounded font-semibold border ${sc.enabled ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/20' : 'bg-slate-950 text-slate-500 border-slate-850'}`}>
+                              <span className={`text-[8px] px-1 py-0.2 rounded font-semibold border ${sc.enabled ? 'bg-amber-950/60 text-amber-500 border-amber-600/20' : 'bg-[#100b08] text-stone-500 border-[#2d231d]'}`}>
                                 {sc.enabled ? 'ACTIVE' : 'MUTED'}
                               </span>
                               <button
                                 onClick={() => handleToggleSchedule(sc.id)}
-                                className="text-slate-400 hover:text-emerald-400 transition-colors text-[9px] border border-slate-800 rounded px-1.5 py-0.2 bg-slate-950 cursor-pointer"
+                                className="text-stone-400 hover:text-amber-500 transition-colors text-[9px] border border-[#2d231d] rounded px-1.5 py-0.2 bg-[#100b08] cursor-pointer"
                               >
                                 {sc.enabled ? 'Mute' : 'Active'}
                               </button>
                             </div>
                           </div>
-                          <p className="text-[11px] text-slate-400 leading-normal font-sans mb-2">{sc.description}</p>
-                          <div className="space-y-1 font-mono text-[9px] text-slate-500 border-t border-slate-800/40 pt-2">
-                            <div><span className="text-slate-400 uppercase">Interval</span>: {sc.cron}</div>
-                            <div><span className="text-slate-400 uppercase">Task Trigger</span>: "{sc.taskPrompt}"</div>
-                            <div><span className="text-slate-400 uppercase">Out Routing</span>: {sc.outputChannel}</div>
-                            {sc.lastRun && <div><span className="text-slate-400 uppercase">Last Run</span>: {sc.lastRun.slice(11, 19)}</div>}
-                            <div><span className="text-[#22c55e] uppercase font-semibold">Next Tick</span>: {sc.nextRun.slice(11, 19)}</div>
+                          <p className="text-[11px] text-stone-400 leading-normal font-sans mb-2">{sc.description}</p>
+                          <div className="space-y-1 font-mono text-[9px] text-stone-500 border-t border-[#2d231d]/40 pt-2">
+                            <div><span className="text-stone-400 uppercase">Interval</span>: {sc.cron}</div>
+                            <div><span className="text-stone-400 uppercase">Task Trigger</span>: "{sc.taskPrompt}"</div>
+                            <div><span className="text-stone-400 uppercase">Out Routing</span>: {sc.outputChannel}</div>
+                            {sc.lastRun && <div><span className="text-stone-400 uppercase">Last Run</span>: {sc.lastRun.slice(11, 19)}</div>}
+                            <div><span className="text-amber-500 uppercase font-semibold">Next Tick</span>: {sc.nextRun.slice(11, 19)}</div>
                           </div>
                           <button
                             onClick={() => handleTriggerSchedule(sc.id)}
-                            className="mt-2 w-full py-1 bg-slate-800 hover:bg-slate-750 text-slate-250 border border-slate-700/60 hover:border-emerald-500/20 rounded font-mono text-[9px] transition-all cursor-pointer flex items-center justify-center space-x-1"
+                            className="mt-2 w-full py-1 bg-[#1c1410] hover:bg-[#201813] text-stone-200 border border-[#2d231d] hover:border-amber-600/20 rounded font-mono text-[9px] transition-all cursor-pointer flex items-center justify-center space-x-1"
                           >
                             <Play size={8} />
                             <span>TRIGGER_AUTOMATION_NOW</span>
@@ -2058,8 +2151,8 @@ export default function App() {
                     </div>
 
                     {/* Quick Add Schedule */}
-                    <div className="mt-4 pt-4 border-t border-slate-700/40">
-                      <h4 className="text-[10px] font-mono font-semibold text-slate-400 uppercase mb-2 flex items-center"><Plus size={10} className="mr-0.5" /> New Automated Timed Task</h4>
+                    <div className="mt-4 pt-4 border-t border-[#2d231d]/40">
+                      <h4 className="text-[10px] font-mono font-semibold text-stone-400 uppercase mb-2 flex items-center"><Plus size={10} className="mr-0.5" /> New Automated Timed Task</h4>
                       <form onSubmit={handleAddSchedule} className="space-y-2 font-mono text-xs">
                         <div>
                           <input
@@ -2067,7 +2160,7 @@ export default function App() {
                             placeholder="Title (e.g. Server Backup)"
                             value={schedTitle}
                             onChange={(e) => setSchedTitle(e.target.value)}
-                            className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2.5 py-1 text-slate-200 focus:outline-none focus:border-emerald-500"
+                            className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1 text-stone-200 focus:outline-none focus:border-amber-600/40"
                             required
                           />
                         </div>
@@ -2077,7 +2170,7 @@ export default function App() {
                             placeholder="Description (What it executes)"
                             value={schedDesc}
                             onChange={(e) => setSchedDesc(e.target.value)}
-                            className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2.5 py-1 text-slate-200 focus:outline-none focus:border-emerald-500"
+                            className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1 text-stone-200 focus:outline-none focus:border-amber-600/40"
                           />
                         </div>
                         <div className="grid grid-cols-2 gap-1.5">
@@ -2085,7 +2178,7 @@ export default function App() {
                             <select
                               value={schedCron}
                               onChange={(e) => setSchedCron(e.target.value)}
-                              className="w-full bg-[#0f172a] border border-slate-700/60 rounded p-1 text-slate-200 text-xs"
+                              className="w-full bg-[#1c1410] border border-[#2d231d] rounded p-1 text-stone-200 text-xs"
                             >
                               <option value="interval_10_sec">10 Seconds (Test)</option>
                               <option value="hourly">Hourly</option>
@@ -2096,7 +2189,7 @@ export default function App() {
                             <select
                               value={schedChannel}
                               onChange={(e) => setSchedChannel(e.target.value as any)}
-                              className="w-full bg-[#0f172a] border border-slate-700/60 rounded p-1 text-slate-200 text-xs"
+                              className="w-full bg-[#1c1410] border border-[#2d231d] rounded p-1 text-stone-200 text-xs"
                             >
                               <option value="terminal">Terminal Log</option>
                               <option value="telegram">Telegram Bot</option>
@@ -2111,46 +2204,46 @@ export default function App() {
                             placeholder="Prompt task instructions for LLM..."
                             value={schedPrompt}
                             onChange={(e) => setSchedPrompt(e.target.value)}
-                            className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2.5 py-1 text-slate-200 focus:outline-none focus:border-emerald-500"
+                            className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1 text-stone-200 focus:outline-none focus:border-amber-600/40"
                             required
                           />
                         </div>
-                        <button type="submit" className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold cursor-pointer text-[10px]">DEPLOY_AUTOMATION_CHRON</button>
+                        <button type="submit" className="w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold cursor-pointer text-[10px]">DEPLOY_AUTOMATION_CHRON</button>
                       </form>
                     </div>
 
                   </div>
 
                   {/* Right Column: Execution Console Logs */}
-                  <div className="lg:col-span-8 flex flex-col bg-[#020617] border border-slate-700/60 rounded-md overflow-hidden shadow-sm h-[450px] lg:h-full">
-                    <div className="px-3.5 py-2 border-b border-slate-700/60 bg-slate-950 flex items-center justify-between">
+                  <div className="lg:col-span-8 flex flex-col bg-[#140f0c] border border-[#2d231d] rounded-md overflow-hidden shadow-sm h-[450px] lg:h-full">
+                    <div className="px-3.5 py-2 border-b border-[#2d231d] bg-[#100b08] flex items-center justify-between">
                       <div className="flex items-center space-x-2">
-                        <TerminalIcon className="text-emerald-400" size={13} />
-                        <span className="font-mono text-[10px] font-semibold text-slate-300 tracking-wide uppercase">AUTOMATED_EXECUTION_LOGGER</span>
+                        <TerminalIcon className="text-amber-500" size={13} />
+                        <span className="font-mono text-[10px] font-semibold text-stone-300 tracking-wide uppercase">AUTOMATED_EXECUTION_LOGGER</span>
                       </div>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-3.5 bg-slate-950/80 font-mono text-[11px] text-emerald-400 space-y-2 custom-scrollbar">
+                    <div className="flex-1 overflow-y-auto p-3.5 bg-[#100b08]/80 font-mono text-[11px] text-amber-500 space-y-2 custom-scrollbar">
                       {db?.logs && db.logs.length > 0 ? (
                         db.logs.map((log) => (
-                           <div key={log.id} className="p-2.5 bg-slate-900/30 border border-slate-800/60 rounded">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800/40 pb-1 mb-1.5">
-                              <span className="text-emerald-500 font-bold text-[10px]">[{log.timestamp.slice(11, 19)}] EVENT: {log.toolName}</span>
+                           <div key={log.id} className="p-2.5 bg-[#1c1410]/30 border border-[#2d231d]/60 rounded">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#2d231d]/40 pb-1 mb-1.5">
+                              <span className="text-amber-500 font-bold text-[10px]">[{log.timestamp.slice(11, 19)}] EVENT: {log.toolName}</span>
                               <div className="flex items-center space-x-2 mt-0.5 sm:mt-0 text-[8px]">
-                                <span className="text-slate-500">ID: {log.id}</span>
-                                <span className="text-slate-500">Duration: {log.durationMs}ms</span>
-                                <span className={`px-1 rounded uppercase font-bold ${log.status === 'success' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/20' : 'bg-rose-950/40 text-rose-400 border border-rose-500/20'}`}>{log.status}</span>
+                                <span className="text-stone-500">ID: {log.id}</span>
+                                <span className="text-stone-500">Duration: {log.durationMs}ms</span>
+                                <span className={`px-1 rounded uppercase font-bold ${log.status === 'success' ? 'bg-amber-950/40 text-amber-500 border border-amber-600/20' : 'bg-rose-950/40 text-rose-400 border border-rose-900/20'}`}>{log.status}</span>
                               </div>
                             </div>
                             {log.parameters && Object.keys(log.parameters).length > 0 && (
-                              <div className="text-slate-500 mb-1 text-[9px]">Arguments: {JSON.stringify(log.parameters)}</div>
+                              <div className="text-stone-500 mb-1 text-[9px]">Arguments: {JSON.stringify(log.parameters)}</div>
                             )}
-                            <pre className="whitespace-pre-wrap select-text leading-normal font-mono font-medium text-slate-300 p-1.5 bg-slate-950 rounded border border-slate-900 text-[10px] custom-scrollbar">{log.result}</pre>
+                            <pre className="whitespace-pre-wrap select-text leading-normal font-mono font-medium text-stone-300 p-1.5 bg-[#100b08] rounded border border-[#2d231d] text-[10px] custom-scrollbar">{log.result}</pre>
                           </div>
                         ))
                       ) : (
-                        <div className="text-slate-500 text-center py-8 italic text-xs">No automated executions logged. Automated tasks check for triggers every 10 seconds.</div>
+                        <div className="text-stone-500 text-center py-8 italic text-xs">No automated executions logged. Automated tasks check for triggers every 10 seconds.</div>
                       )}
                     </div>
                   </div>
@@ -2163,11 +2256,11 @@ export default function App() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full min-h-0">
                   
                   {/* Left Column: Note Catalog */}
-                  <div className="lg:col-span-4 bg-[#0b1121] border border-slate-700/60 rounded-md p-3 shadow-sm flex flex-col h-[280px] lg:h-full max-h-[520px]">
-                    <div className="flex items-center justify-between border-b border-slate-700/60 pb-2 mb-3">
+                  <div className="lg:col-span-4 bg-[#17120e] border border-[#2d231d] rounded-md p-3 shadow-sm flex flex-col h-[280px] lg:h-full max-h-[520px]">
+                    <div className="flex items-center justify-between border-b border-[#2d231d]/40 pb-2 mb-3">
                       <div className="flex items-center space-x-2">
-                        <BookOpen size={14} className="text-teal-400" />
-                        <h3 className="font-semibold text-[10px] font-mono tracking-wide uppercase text-slate-300">NOTEBOOK_REPOSITORIES</h3>
+                        <BookOpen size={14} className="text-amber-500" />
+                        <h3 className="font-semibold text-[10px] font-mono tracking-wide uppercase text-stone-300">NOTEBOOK_REPOSITORIES</h3>
                       </div>
                       <button
                         onClick={() => {
@@ -2175,7 +2268,7 @@ export default function App() {
                           setNoteTitle('New Note Entry');
                           setNoteContent('');
                         }}
-                        className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-[#22c55e] border border-slate-800 cursor-pointer"
+                        className="p-1 rounded bg-[#1c1410] hover:bg-[#201813] text-amber-500 border border-[#2d231d] cursor-pointer"
                       >
                         <Plus size={12} />
                       </button>
@@ -2191,25 +2284,25 @@ export default function App() {
                             setNoteContent(n.content);
                           }}
                           className={`p-2.5 rounded border transition-all cursor-pointer text-xs ${
-                            selectedNote?.id === n.id ? 'bg-[#22c55e]/5 border-emerald-500/40' : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+                            selectedNote?.id === n.id ? 'bg-amber-950/20 border-amber-600/40' : 'bg-[#1c1410]/60 border-[#2d231d]/80 hover:border-amber-600/20'
                           }`}
                         >
-                          <div className="font-semibold text-slate-200 font-mono mb-0.5 truncate">{n.title}</div>
-                          <p className="text-slate-400 font-sans line-clamp-2 leading-relaxed text-[11px]">{n.content}</p>
-                          <span className="text-[8px] text-slate-500 font-mono block mt-1.5 text-right">{n.updatedAt.slice(11, 16)}</span>
+                          <div className="font-semibold text-stone-200 font-mono mb-0.5 truncate">{n.title}</div>
+                          <p className="text-stone-400 font-sans line-clamp-2 leading-relaxed text-[11px]">{n.content}</p>
+                          <span className="text-[8px] text-stone-500 font-mono block mt-1.5 text-right">{n.updatedAt.slice(11, 16)}</span>
                         </div>
                       ))}
                     </div>
                   </div>
 
                   {/* Right Column: Note Viewer/Editor */}
-                  <div className="lg:col-span-8 flex flex-col bg-[#0b1121] border border-slate-700/60 rounded-md p-4 shadow-sm h-[450px] lg:h-full font-mono text-xs">
-                    <div className="flex items-center justify-between border-b border-slate-700/60 pb-2 mb-3">
-                      <span className="font-semibold text-slate-400 text-[10px]">NOTE_EDITOR</span>
+                  <div className="lg:col-span-8 flex flex-col bg-[#17120e] border border-[#2d231d] rounded-md p-4 shadow-sm h-[450px] lg:h-full font-mono text-xs">
+                    <div className="flex items-center justify-between border-b border-[#2d231d]/40 pb-2 mb-3">
+                      <span className="font-semibold text-stone-400 text-[10px]">NOTE_EDITOR</span>
                       {selectedNote && (
                         <button
                           onClick={() => handleDeleteNote(selectedNote.id)}
-                          className="flex items-center space-x-1 text-rose-400 hover:text-rose-300 border border-rose-950 px-1.5 py-0.5 bg-rose-950/20 rounded cursor-pointer text-[9px]"
+                          className="flex items-center space-x-1 text-rose-400 hover:text-rose-300 border border-rose-900/40 px-1.5 py-0.5 bg-rose-950/20 rounded cursor-pointer text-[9px]"
                         >
                           <Trash2 size={10} />
                           <span>DELETE</span>
@@ -2219,30 +2312,30 @@ export default function App() {
 
                     <div className="space-y-3 flex-1 flex flex-col">
                       <div>
-                        <span className="text-slate-500 text-[9px] block mb-0.5 uppercase">Note Title</span>
+                        <span className="text-stone-500 text-[9px] block mb-0.5 uppercase">Note Title</span>
                         <input
                           type="text"
                           value={noteTitle}
                           onChange={(e) => setNoteTitle(e.target.value)}
                           placeholder="Note Title..."
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500 font-semibold"
+                          className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1.5 text-stone-200 focus:outline-none focus:border-amber-600/40 font-semibold"
                         />
                       </div>
 
                       <div className="flex-1 flex flex-col">
-                        <span className="text-slate-500 text-[9px] block mb-0.5 uppercase font-mono">Content Markdown</span>
+                        <span className="text-stone-500 text-[9px] block mb-0.5 uppercase font-mono">Content Markdown</span>
                         <textarea
                           value={noteContent}
                           onChange={(e) => setNoteContent(e.target.value)}
                           placeholder="Type notes or diary details here (Markdown supported)..."
-                          className="w-full flex-1 bg-[#0f172a] border border-slate-700/60 rounded p-2.5 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans resize-none text-[12px] leading-relaxed custom-scrollbar"
+                          className="w-full flex-1 bg-[#1c1410] border border-[#2d231d] rounded p-2.5 text-stone-200 focus:outline-none focus:border-amber-600/40 font-sans resize-none text-[12px] leading-relaxed custom-scrollbar"
                         />
                       </div>
 
                       <button
                         onClick={handleSaveNote}
                         disabled={savingNote}
-                        className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold font-mono transition-all cursor-pointer flex items-center justify-center space-x-1.5 text-[10px]"
+                        className="w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded font-semibold font-mono transition-all cursor-pointer flex items-center justify-center space-x-1.5 text-[10px]"
                       >
                         <Save size={12} />
                         <span>{savingNote ? 'WRITING...' : 'SAVE_NOTE_PERSISTENCE'}</span>
@@ -2255,13 +2348,13 @@ export default function App() {
 
               {/* Tasks Checklist Tab */}
               {activeTab === 'checklist' && (
-                <div className="max-w-xl mx-auto bg-[#0b1121] border border-slate-700/60 rounded-md p-4 shadow-sm font-mono text-xs">
-                  <div className="flex items-center space-x-2 border-b border-slate-700/60 pb-2 mb-4 justify-between">
+                <div className="max-w-xl mx-auto bg-[#17120e] border border-[#2d231d] rounded-md p-4 shadow-sm font-mono text-xs">
+                  <div className="flex items-center space-x-2 border-b border-[#2d231d]/40 pb-2 mb-4 justify-between">
                     <div className="flex items-center space-x-2">
-                      <CheckSquare size={15} className="text-emerald-400" />
-                      <h3 className="font-semibold text-[10px] tracking-wide uppercase text-slate-300">TASKS_CHECKLIST</h3>
+                      <CheckSquare size={15} className="text-amber-500" />
+                      <h3 className="font-semibold text-[10px] tracking-wide uppercase text-stone-300">TASKS_CHECKLIST</h3>
                     </div>
-                    <span className="text-[8px] bg-slate-900 px-1.5 py-0.5 rounded text-slate-500">STATE_PERSISTED</span>
+                    <span className="text-[8px] bg-[#1c1410] px-1.5 py-0.5 rounded text-stone-500">STATE_PERSISTED</span>
                   </div>
 
                   {/* Add checklist item */}
@@ -2271,9 +2364,9 @@ export default function App() {
                       placeholder="Add task content descriptor..."
                       value={newTodo}
                       onChange={(e) => setNewTodo(e.target.value)}
-                      className="flex-1 bg-[#0f172a] border border-slate-700/60 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-emerald-500"
+                      className="flex-1 bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-amber-600/40 text-stone-200"
                     />
-                    <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white rounded px-3 py-1.5 font-semibold flex items-center space-x-1 transition-all cursor-pointer text-[10px]">
+                    <button type="submit" className="bg-amber-600 hover:bg-amber-500 text-white rounded px-3 py-1.5 font-semibold flex items-center space-x-1 transition-all cursor-pointer text-[10px]">
                       <Plus size={12} />
                       <span>ADD</span>
                     </button>
@@ -2286,23 +2379,23 @@ export default function App() {
                         <div
                           key={t.id}
                           onClick={() => handleToggleTodo(t.id)}
-                          className={`p-2.5 bg-slate-900/40 border rounded flex items-center justify-between cursor-pointer group transition-all ${
-                            t.completed ? 'border-slate-900/40 opacity-60' : 'border-slate-800 hover:border-slate-700'
+                          className={`p-2.5 bg-[#1c1410]/40 border rounded flex items-center justify-between cursor-pointer group transition-all ${
+                            t.completed ? 'border-[#2d231d]/20 opacity-60' : 'border-[#2d231d]/60 hover:border-amber-600/20'
                           }`}
                         >
                           <div className="flex items-center space-x-2 select-none">
                             <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-all ${
-                              t.completed ? 'bg-emerald-600 border-emerald-500 text-white' : 'border-slate-700'
+                              t.completed ? 'bg-amber-600 border-amber-500 text-white' : 'border-[#2d231d]'
                             }`}>
                               {t.completed && <Check size={9} />}
                             </div>
-                            <span className={`text-[11px] ${t.completed ? 'line-through text-slate-500 font-sans' : 'text-slate-300 font-sans'}`}>{t.text}</span>
+                            <span className={`text-[11px] ${t.completed ? 'line-through text-stone-500 font-sans' : 'text-stone-300 font-sans'}`}>{t.text}</span>
                           </div>
-                          <span className="text-[8px] text-slate-500 group-hover:text-rose-400 transition-colors uppercase">Mute ID [{t.id}]</span>
+                          <span className="text-[8px] text-stone-500 group-hover:text-rose-400 transition-colors uppercase">Mute ID [{t.id}]</span>
                         </div>
                       ))
                     ) : (
-                      <div className="text-slate-500 text-center py-8 italic text-xs">No checklist items registered. Create one above.</div>
+                      <div className="text-stone-500 text-center py-8 italic text-xs">No checklist items registered. Create one above.</div>
                     )}
                   </div>
                 </div>
@@ -2442,165 +2535,351 @@ export default function App() {
 
               {/* Learning & Skill Synthesizer Tab */}
               {activeTab === 'learning' && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full min-h-0">
+                <div className="flex flex-col gap-4 w-full h-full min-h-0 overflow-y-auto custom-scrollbar">
                   
-                  {/* Left Column: Skill Blueprint Form */}
-                  <div className="lg:col-span-5 flex flex-col bg-[#17120e] border border-[#2d231d] rounded-md p-4 shadow-sm font-mono text-xs overflow-y-auto custom-scrollbar">
-                    <div className="flex items-center space-x-2 border-b border-[#2d231d] pb-2 mb-3">
-                      <Layers size={14} className="text-amber-500" />
-                      <h3 className="font-semibold text-[10px] tracking-wide uppercase text-stone-200">SKILL_METADATA_BLUEPRINT</h3>
+                  {/* Visual Cognitive Synapse Net */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                    <div className="lg:col-span-8 flex flex-col">
+                      <div className="h-[250px] w-full">
+                        <InteractiveNeuronNetwork learnings={db?.learnings || []} memories={db?.memories || []} />
+                      </div>
                     </div>
 
-                    <div className="space-y-3">
+                    {/* Synaptic Net Legend / Status Panel */}
+                    <div className="lg:col-span-4 flex flex-col bg-[#140f0c] border border-[#2d231d] rounded-md p-4 justify-between font-mono text-xs">
                       <div>
-                        <span className="text-stone-500 text-[9px] block mb-0.5 uppercase">Skill Name (Unique Identifier)</span>
-                        <input
-                          type="text"
-                          value={learningName}
-                          onChange={(e) => setLearningName(e.target.value.replace(/\s+/g, ''))}
-                          placeholder="e.g., DockerMonitor"
-                          className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1.5 text-stone-200 focus:outline-none focus:border-amber-600/40 text-xs font-sans"
-                        />
-                      </div>
-
-                      <div>
-                        <span className="text-stone-500 text-[9px] block mb-0.5 uppercase">Skill Description</span>
-                        <input
-                          type="text"
-                          value={learningDesc}
-                          onChange={(e) => setLearningDesc(e.target.value)}
-                          placeholder="Describe what this skill executes..."
-                          className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1.5 text-stone-200 focus:outline-none focus:border-amber-600/40 text-xs font-sans"
-                        />
-                      </div>
-
-                      <div>
-                        <span className="text-stone-500 text-[9px] block mb-0.5 uppercase">Trigger Phrase / Keyword</span>
-                        <input
-                          type="text"
-                          value={learningTrigger}
-                          onChange={(e) => setLearningTrigger(e.target.value)}
-                          placeholder="Phrase to trigger this skill (e.g. docker status)"
-                          className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1.5 text-stone-200 focus:outline-none focus:border-amber-600/40 text-xs font-sans"
-                        />
-                      </div>
-
-                      <div>
-                        <span className="text-stone-500 text-[9px] block mb-0.5 uppercase">System Instructions / Execution Script</span>
-                        <textarea
-                          rows={3}
-                          value={learningSystem}
-                          onChange={(e) => setLearningSystem(e.target.value)}
-                          placeholder="Core instructions for this skill sandbox execution..."
-                          className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1.5 text-stone-200 focus:outline-none focus:border-amber-600/40 text-xs font-sans"
-                        />
-                      </div>
-
-                      {/* Simulation Strategy */}
-                      <div className="p-3 bg-[#201813] border border-[#2d231d] rounded-md space-y-2">
-                        <span className="text-stone-400 text-[9px] block uppercase font-bold tracking-wider">Validation Simulation Mode</span>
-                        
-                        <div className="flex items-center justify-between">
-                          <label className="text-stone-300 text-[11px] font-medium flex items-center space-x-1.5 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="simMode"
-                              checked={learningSimMode === 'standard'}
-                              onChange={() => setLearningSimMode('standard')}
-                              className="w-3 h-3 text-amber-600 bg-stone-900 border-stone-800 focus:ring-0 focus:ring-offset-0"
-                            />
-                            <span>Standard Compilation (Healthy)</span>
-                          </label>
-                          <span className="text-[8px] bg-emerald-950 text-emerald-400 px-1 py-0.2 rounded font-mono font-semibold uppercase">1-TICK</span>
+                        <div className="flex items-center space-x-2 border-b border-[#2d231d] pb-2 mb-2">
+                          <Brain size={14} className="text-orange-500 animate-pulse" />
+                          <h3 className="font-bold text-[10px] uppercase text-stone-200">COGNITIVE_PROJECTION_LEGEND</h3>
                         </div>
-
-                        <div className="flex items-center justify-between">
-                          <label className="text-stone-300 text-[11px] font-medium flex items-center space-x-1.5 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="simMode"
-                              checked={learningSimMode === 'healing'}
-                              onChange={() => setLearningSimMode('healing')}
-                              className="w-3 h-3 text-amber-600 bg-stone-900 border-stone-800 focus:ring-0 focus:ring-offset-0"
-                            />
-                            <span>Trigger Overlap (Auto-Repair & Healing)</span>
-                          </label>
-                          <span className="text-[8px] bg-rose-950 text-rose-400 px-1 py-0.2 rounded font-mono font-semibold uppercase">SELF-HEAL</span>
+                        <p className="text-[10px] text-stone-400 leading-normal mb-3 font-sans">
+                          Alice's neural model simulates active knowledge projection. Synapses adapt relative to mouse proximity and database size.
+                        </p>
+                        <div className="space-y-1.5 text-[9px] uppercase">
+                          <div className="flex items-center space-x-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#ea580c] shadow-[0_0_6px_#ea580c]" />
+                            <span className="text-orange-400 font-bold">Active Learnings ({db?.learnings?.length || 0})</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#f59e0b] shadow-[0_0_6px_#f59e0b]" />
+                            <span className="text-amber-400 font-bold">Long-Term Memories ({db?.memories?.length || 0})</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#45352c]" />
+                            <span className="text-stone-500">Latent Synaptic Buffers</span>
+                          </div>
                         </div>
                       </div>
 
-                      <button
-                        onClick={handleRunAutonomousSynthesis}
-                        disabled={learningStep > 0 && learningStep < 4}
-                        className="w-full py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-[#241d18] disabled:text-stone-600 text-white font-bold rounded transition-all cursor-pointer flex items-center justify-center space-x-1.5"
-                      >
-                        <RefreshCw className={learningStep > 0 && learningStep < 4 ? 'animate-spin' : ''} size={13} />
-                        <span>{learningStep > 0 && learningStep < 4 ? 'Synthesizing Skill...' : 'Activate Autonomous Synthesizer'}</span>
-                      </button>
+                      <div className="pt-3 border-t border-[#2d231d] mt-2 bg-[#1c1410]/40 p-2 rounded text-[9px] font-sans text-stone-400">
+                        <span className="font-mono text-[8px] font-bold uppercase text-amber-500 block mb-0.5">DYNAMIC REAL-TIME ACTION</span>
+                        Interactive Nodes: Hover over any active neuron projection to pull the synapse. Hover to inspect corresponding memory titles and learning nodes!
+                      </div>
                     </div>
                   </div>
 
-                  {/* Right Column: Live Logs Console */}
-                  <div className="lg:col-span-7 flex flex-col bg-[#140f0c] border border-[#2d231d] rounded-lg overflow-hidden h-full min-h-0 font-mono text-xs">
-                    {/* Header */}
-                    <div className="px-4 py-2.5 border-b border-[#2d231d] bg-[#100b08] flex items-center justify-between select-none">
-                      <div className="flex items-center space-x-2">
-                        <TerminalIcon className="text-amber-500" size={13} />
-                        <span className="font-bold text-stone-400 text-[10px]">AUTONOMOUS_LEARNING_CONSOLE</span>
-                      </div>
-                      <div className="flex items-center space-x-1.5">
-                        {learningStep === 0 && <span className="text-[8px] bg-[#251d18] text-stone-400 px-1.5 py-0.5 rounded">STANDBY</span>}
-                        {learningStep > 0 && learningStep < 4 && <span className="text-[8px] bg-amber-950 text-amber-500 px-1.5 py-0.5 rounded animate-pulse">PROCESSING</span>}
-                        {learningStep === 4 && <span className="text-[8px] bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded">ACTIVE & REGISTERED</span>}
-                      </div>
-                    </div>
-
-                    {/* Console Screen */}
-                    <div className="flex-1 bg-[#100b08] p-4 overflow-y-auto space-y-1.5 custom-scrollbar text-[11px]">
-                      {learningLogs.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-stone-600 space-y-1">
-                          <span>// SYSTEM IS ONLINE</span>
-                          <span className="text-[10px] animate-pulse">Waiting for execution signal...</span>
+                  {/* Row 2: Bento Grid for Self-Learning Dashboard & Synthesizer Controls */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                    
+                    {/* Column 1: Self-Learning Dashboard & Lessons Ledger */}
+                    <div className="lg:col-span-7 flex flex-col bg-[#140f0c] border border-[#2d231d] rounded-md p-4 font-mono text-xs overflow-y-auto max-h-[500px] custom-scrollbar">
+                      <div className="flex items-center justify-between border-b border-[#2d231d] pb-2 mb-3">
+                        <div className="flex items-center space-x-2">
+                          <BookOpen size={14} className="text-amber-500" />
+                          <h3 className="font-bold text-[10px] tracking-wide uppercase text-stone-200">SELF_LEARNING_LEDGER</h3>
                         </div>
-                      ) : (
-                        learningLogs.map((log, idx) => (
-                          <div
-                            key={idx}
-                            className={`leading-relaxed whitespace-pre-wrap ${
-                              log.startsWith('❌') 
-                                ? 'text-rose-400 font-bold' 
-                                : log.startsWith('✅') 
-                                  ? 'text-emerald-400 font-bold' 
-                                  : log.includes('[SELF-HEALING]') 
-                                    ? 'text-amber-500 font-semibold' 
-                                    : 'text-stone-300'
-                            }`}
-                          >
-                            {log}
-                          </div>
-                        ))
-                      )}
-                    </div>
+                        <button 
+                          onClick={handleClearLearnings}
+                          className="text-[9px] bg-red-950/40 text-red-400 hover:bg-red-900/30 border border-red-900/40 px-2 py-0.5 rounded cursor-pointer transition-all"
+                        >
+                          Clear Ledger Cache
+                        </button>
+                      </div>
 
-                    {/* Registered list panel inside tab */}
-                    <div className="p-3 border-t border-[#2d231d] bg-[#140f0c] text-[10px] space-y-1.5">
-                      <span className="block font-bold uppercase text-stone-500 tracking-wider">Currently Deployed Custom Skills ({db?.skills.length || 0})</span>
-                      <div className="max-h-24 overflow-y-auto space-y-1 custom-scrollbar">
-                        {db?.skills && db.skills.length > 0 ? (
-                          db.skills.map((s) => (
-                            <div key={s.id} className="flex items-center justify-between p-1.5 rounded bg-[#1c1410] border border-[#2d231d]">
-                              <div className="flex items-center space-x-1.5 truncate">
-                                <span className="text-amber-500 font-bold">#{s.name}</span>
-                                <span className="text-stone-500 truncate">({s.triggerPrompt}) - {s.description}</span>
+                      {/* Dynamic Counters Row */}
+                      <div className="grid grid-cols-4 gap-2 mb-3 text-center">
+                        <div className="bg-[#1c1410] border border-[#2d231d] p-1.5 rounded">
+                          <span className="text-[14px] font-bold text-orange-500 font-mono block">
+                            {db?.learnings?.filter(l => l.type === 'conversation').length || 0}
+                          </span>
+                          <span className="text-[8px] text-stone-500 uppercase block font-sans">Chats</span>
+                        </div>
+                        <div className="bg-[#1c1410] border border-[#2d231d] p-1.5 rounded">
+                          <span className="text-[14px] font-bold text-amber-500 font-mono block">
+                            {db?.learnings?.filter(l => l.type === 'task').length || 0}
+                          </span>
+                          <span className="text-[8px] text-stone-500 uppercase block font-sans">Tasks</span>
+                        </div>
+                        <div className="bg-[#1c1410] border border-[#2d231d] p-1.5 rounded">
+                          <span className="text-[14px] font-bold text-emerald-500 font-mono block">
+                            {db?.learnings?.filter(l => l.type === 'code_fix').length || 0}
+                          </span>
+                          <span className="text-[8px] text-stone-500 uppercase block font-sans">Code Fixes</span>
+                        </div>
+                        <div className="bg-[#1c1410] border border-[#2d231d] p-1.5 rounded">
+                          <span className="text-[14px] font-bold text-[#ea580c] font-mono block">
+                            {db?.learnings?.filter(l => l.type === 'failure_healing').length || 0}
+                          </span>
+                          <span className="text-[8px] text-stone-500 uppercase block font-sans">Self Healed</span>
+                        </div>
+                      </div>
+
+                      {/* Scrollable list of lessons */}
+                      <div className="space-y-2 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                        {db?.learnings && db.learnings.length > 0 ? (
+                          db.learnings.map((lesson) => {
+                            const isExpanded = expandedLessonId === lesson.id;
+                            let typeIcon = '💬';
+                            let typeColor = 'text-sky-400 border-sky-900/40 bg-sky-950/40';
+                            if (lesson.type === 'task') {
+                              typeIcon = '⚙️';
+                              typeColor = 'text-amber-400 border-amber-900/40 bg-amber-950/40';
+                            } else if (lesson.type === 'code_fix') {
+                              typeIcon = '💻';
+                              typeColor = 'text-emerald-400 border-emerald-900/40 bg-emerald-950/40';
+                            } else if (lesson.type === 'failure_healing') {
+                              typeIcon = '🛡️';
+                              typeColor = 'text-orange-400 border-orange-900/40 bg-orange-950/40';
+                            }
+
+                            return (
+                              <div 
+                                key={lesson.id} 
+                                className={`p-2.5 rounded border transition-all ${
+                                  isExpanded 
+                                    ? 'bg-[#1c1410] border-amber-600/40 shadow-md' 
+                                    : 'bg-[#17110e]/60 border-[#2d231d] hover:border-amber-600/20'
+                                }`}
+                              >
+                                <div 
+                                  className="flex items-start justify-between cursor-pointer"
+                                  onClick={() => setExpandedLessonId(isExpanded ? null : lesson.id)}
+                                >
+                                  <div className="flex items-start space-x-2">
+                                    <span className="text-sm mt-0.5 shrink-0">{typeIcon}</span>
+                                    <div>
+                                      <div className="flex items-center space-x-2">
+                                        <span className="font-bold text-stone-200 text-xs hover:text-amber-500 transition-colors">{lesson.title}</span>
+                                        <span className={`text-[8px] px-1 py-0.2 rounded border font-bold uppercase shrink-0 ${typeColor}`}>
+                                          {lesson.type.replace('_', ' ')}
+                                        </span>
+                                      </div>
+                                      <p className="text-[10px] text-stone-400 mt-1 font-sans leading-relaxed">
+                                        {lesson.description}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex items-center space-x-1 shrink-0 ml-2">
+                                    <span className="text-[8px] text-stone-500">{lesson.timestamp?.slice(0, 16).replace('T', ' ')}</span>
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteLearning(lesson.id);
+                                      }}
+                                      className="text-stone-500 hover:text-rose-400 p-1 cursor-pointer transition-colors"
+                                    >
+                                      <Trash2 size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Expandable detailed review panel */}
+                                {isExpanded && (
+                                  <div className="mt-3 pt-2.5 border-t border-[#2d231d] text-[10px] text-stone-300 font-sans leading-relaxed animate-fadeIn">
+                                    <span className="font-mono text-[8px] text-amber-500 font-semibold block uppercase mb-1">
+                                      Alice Cognitive Insight Details
+                                    </span>
+                                    <p className="bg-[#120c09] border border-[#2d231d] p-2 rounded text-stone-300 font-mono text-[9px] whitespace-pre-wrap leading-normal">
+                                      {lesson.details || 'No deep analytical telemetry captured for this milestone. Connection stable.'}
+                                    </p>
+                                    <div className="mt-2 flex items-center justify-between font-mono text-[8px] text-stone-500">
+                                      <span>PERSISTENCE: ENVELOPE STABLE</span>
+                                      <span className="uppercase text-emerald-500 font-semibold">Status: {lesson.status}</span>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                              <span className="text-[8px] bg-emerald-950 text-emerald-400 px-1.5 rounded uppercase shrink-0">Healthy</span>
-                            </div>
-                          ))
+                            );
+                          })
                         ) : (
-                          <div className="text-stone-600 italic">No skills registered on server database. Run synthesizer to create one!</div>
+                          <div className="h-full flex flex-col items-center justify-center text-stone-600 text-center py-10">
+                            <span>💬 // NO LESSONS STORED YET</span>
+                            <p className="text-[10px] font-sans text-stone-500 max-w-xs mt-1">
+                              Chat with Alice or synthesize custom skills to trigger autonomous cognitive learning!
+                            </p>
+                          </div>
                         )}
                       </div>
                     </div>
+
+                    {/* Column 2: Original Autonomous Synthesizer Form & Logs Console */}
+                    <div className="lg:col-span-5 flex flex-col gap-4">
+                      
+                      {/* Sub-panel 1: Blueprint Form */}
+                      <div className="bg-[#17120e] border border-[#2d231d] rounded-md p-4 shadow-sm font-mono text-xs overflow-y-auto custom-scrollbar">
+                        <div className="flex items-center space-x-2 border-b border-[#2d231d] pb-2 mb-3">
+                          <Layers size={14} className="text-amber-500" />
+                          <h3 className="font-semibold text-[10px] tracking-wide uppercase text-stone-200">SKILL_METADATA_BLUEPRINT</h3>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div>
+                            <span className="text-stone-500 text-[9px] block mb-0.5 uppercase">Skill Name (Unique Identifier)</span>
+                            <input
+                              type="text"
+                              value={learningName}
+                              onChange={(e) => setLearningName(e.target.value.replace(/\s+/g, ''))}
+                              placeholder="e.g., DockerMonitor"
+                              className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1.5 text-stone-200 focus:outline-none focus:border-amber-600/40 text-xs font-sans"
+                            />
+                          </div>
+
+                          <div>
+                            <span className="text-stone-500 text-[9px] block mb-0.5 uppercase">Skill Description</span>
+                            <input
+                              type="text"
+                              value={learningDesc}
+                              onChange={(e) => setLearningDesc(e.target.value)}
+                              placeholder="Describe what this skill executes..."
+                              className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1.5 text-stone-200 focus:outline-none focus:border-amber-600/40 text-xs font-sans"
+                            />
+                          </div>
+
+                          <div>
+                            <span className="text-stone-500 text-[9px] block mb-0.5 uppercase">Trigger Phrase / Keyword</span>
+                            <input
+                              type="text"
+                              value={learningTrigger}
+                              onChange={(e) => setLearningTrigger(e.target.value)}
+                              placeholder="Phrase to trigger this skill (e.g. docker status)"
+                              className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1.5 text-stone-200 focus:outline-none focus:border-amber-600/40 text-xs font-sans"
+                            />
+                          </div>
+
+                          <div>
+                            <span className="text-stone-500 text-[9px] block mb-0.5 uppercase">System Instructions / Execution Script</span>
+                            <textarea
+                              rows={3}
+                              value={learningSystem}
+                              onChange={(e) => setLearningSystem(e.target.value)}
+                              placeholder="Core instructions for this skill sandbox execution..."
+                              className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1.5 text-stone-200 focus:outline-none focus:border-amber-600/40 text-xs font-sans"
+                            />
+                          </div>
+
+                          {/* Simulation Strategy */}
+                          <div className="p-3 bg-[#201813] border border-[#2d231d] rounded-md space-y-2">
+                            <span className="text-stone-400 text-[9px] block uppercase font-bold tracking-wider">Validation Simulation Mode</span>
+                            
+                            <div className="flex items-center justify-between">
+                              <label className="text-stone-300 text-[11px] font-medium flex items-center space-x-1.5 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="simMode"
+                                  checked={learningSimMode === 'standard'}
+                                  onChange={() => setLearningSimMode('standard')}
+                                  className="w-3 h-3 text-amber-600 bg-stone-900 border-stone-800 focus:ring-0 focus:ring-offset-0"
+                                />
+                                <span>Standard Compilation (Healthy)</span>
+                              </label>
+                              <span className="text-[8px] bg-emerald-950 text-emerald-400 px-1 py-0.2 rounded font-mono font-semibold uppercase">1-TICK</span>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                              <label className="text-stone-300 text-[11px] font-medium flex items-center space-x-1.5 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="simMode"
+                                  checked={learningSimMode === 'healing'}
+                                  onChange={() => setLearningSimMode('healing')}
+                                  className="w-3 h-3 text-amber-600 bg-stone-900 border-stone-800 focus:ring-0 focus:ring-offset-0"
+                                />
+                                <span>Trigger Overlap (Auto-Repair & Healing)</span>
+                              </label>
+                              <span className="text-[8px] bg-rose-950 text-rose-400 px-1 py-0.2 rounded font-mono font-semibold uppercase">SELF-HEAL</span>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={handleRunAutonomousSynthesis}
+                            disabled={learningStep > 0 && learningStep < 4}
+                            className="w-full py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-[#241d18] disabled:text-stone-600 text-white font-bold rounded transition-all cursor-pointer flex items-center justify-center space-x-1.5"
+                          >
+                            <RefreshCw className={learningStep > 0 && learningStep < 4 ? 'animate-spin' : ''} size={13} />
+                            <span>{learningStep > 0 && learningStep < 4 ? 'Synthesizing Skill...' : 'Activate Autonomous Synthesizer'}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Sub-panel 2: Console Logs Screen */}
+                      <div className="flex flex-col bg-[#140f0c] border border-[#2d231d] rounded-md overflow-hidden font-mono text-xs max-h-[300px]">
+                        <div className="px-3 py-2 border-b border-[#2d231d] bg-[#100b08] flex items-center justify-between select-none">
+                          <div className="flex items-center space-x-2">
+                            <TerminalIcon className="text-amber-500" size={13} />
+                            <span className="font-bold text-stone-400 text-[10px]">AUTONOMOUS_LEARNING_CONSOLE</span>
+                          </div>
+                          <div className="flex items-center space-x-1.5">
+                            {learningStep === 0 && <span className="text-[8px] bg-[#251d18] text-stone-400 px-1.5 py-0.5 rounded">STANDBY</span>}
+                            {learningStep > 0 && learningStep < 4 && <span className="text-[8px] bg-amber-950 text-amber-500 px-1.5 py-0.5 rounded animate-pulse">PROCESSING</span>}
+                            {learningStep === 4 && <span className="text-[8px] bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded">ACTIVE & REGISTERED</span>}
+                          </div>
+                        </div>
+
+                        <div className="p-3 bg-[#100b08] overflow-y-auto space-y-1.5 custom-scrollbar text-[10px] min-h-[120px] max-h-[180px]">
+                          {learningLogs.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center text-stone-600 space-y-1 py-8">
+                              <span>// SYNAPSE SYSTEM ONLINE</span>
+                              <span className="text-[9px] animate-pulse">Waiting for compile signal...</span>
+                            </div>
+                          ) : (
+                            learningLogs.map((log, idx) => (
+                              <div
+                                key={idx}
+                                className={`leading-relaxed whitespace-pre-wrap ${
+                                  log.startsWith('❌') 
+                                    ? 'text-rose-400 font-bold' 
+                                    : log.startsWith('✅') 
+                                      ? 'text-emerald-400 font-bold' 
+                                      : log.includes('[SELF-HEALING]') 
+                                        ? 'text-amber-500 font-semibold' 
+                                        : 'text-stone-300'
+                                }`}
+                              >
+                                {log}
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        {/* Registered list panel inside console box */}
+                        <div className="p-3 border-t border-[#2d231d] bg-[#140f0c] text-[9px] space-y-1.5">
+                          <span className="block font-bold uppercase text-stone-500 tracking-wider">Currently Deployed Custom Skills ({db?.skills?.length || 0})</span>
+                          <div className="max-h-24 overflow-y-auto space-y-1 custom-scrollbar">
+                            {db?.skills && db.skills.length > 0 ? (
+                              db.skills.map((s) => (
+                                <div key={s.id} className="flex items-center justify-between p-1 rounded bg-[#1c1410] border border-[#2d231d]">
+                                  <div className="flex items-center space-x-1 truncating w-5/6">
+                                    <span className="text-amber-500 font-bold shrink-0">#{s.name}</span>
+                                    <span className="text-stone-500 truncate">({s.triggerPrompt}) - {s.description}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => handleDeleteSkill(s.id)}
+                                    className="text-stone-500 hover:text-rose-400 p-0.5 cursor-pointer"
+                                  >
+                                    <Trash2 size={10} />
+                                  </button>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-stone-600 italic">No skills registered. Run synthesizer to create one!</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+
                   </div>
 
                 </div>
@@ -2608,16 +2887,16 @@ export default function App() {
 
               {/* Node Settings Tab */}
               {activeTab === 'settings' && (
-                <div className="max-w-xl mx-auto bg-[#0b1121] border border-slate-700/60 rounded-md p-4 shadow-sm font-mono text-xs">
-                  <div className="flex items-center space-x-2 border-b border-slate-700/60 pb-2 mb-4">
-                    <Settings size={15} className="text-[#22c55e]" />
-                    <h3 className="font-semibold text-[10px] tracking-wide uppercase text-slate-300">NODE_CONFIGURATION_MANAGER</h3>
+                <div className="max-w-xl mx-auto bg-[#17120e] border border-[#2d231d] rounded-md p-4 shadow-sm font-mono text-xs">
+                  <div className="flex items-center space-x-2 border-b border-[#2d231d]/40 pb-2 mb-4">
+                    <Settings size={15} className="text-amber-500" />
+                    <h3 className="font-semibold text-[10px] tracking-wide uppercase text-stone-300">NODE_CONFIGURATION_MANAGER</h3>
                   </div>
 
                   <form onSubmit={handleSaveConfig} className="space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <span className="text-slate-500 text-[9px] block mb-0.5 uppercase">AI Model Provider</span>
+                        <span className="text-stone-500 text-[9px] block mb-0.5 uppercase">AI Model Provider</span>
                         <select
                           value={aiProvider}
                           onChange={(e: any) => {
@@ -2632,7 +2911,7 @@ export default function App() {
                               setModelName('');
                             }
                           }}
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500 text-xs"
+                          className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2 py-1.5 text-stone-200 focus:outline-none focus:border-amber-600/40 text-xs"
                         >
                           <option value="gemini">Google Gemini AI</option>
                           <option value="openai">OpenAI Endpoint</option>
@@ -2642,13 +2921,13 @@ export default function App() {
                         </select>
                       </div>
                       <div>
-                        <span className="text-slate-500 text-[9px] block mb-0.5 uppercase">Model Endpoint / Model Name</span>
+                        <span className="text-stone-500 text-[9px] block mb-0.5 uppercase">Model Endpoint / Model Name</span>
                         <input
                           type="text"
                           value={modelName}
                           onChange={(e) => setModelName(e.target.value)}
                           placeholder="gemini-3.5-flash, gpt-4o, etc."
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
+                          className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2 py-1.5 text-stone-200 focus:outline-none focus:border-amber-600/40 font-sans"
                         />
                       </div>
                     </div>
@@ -2668,32 +2947,32 @@ export default function App() {
                       />
                     ) : (
                       <div>
-                        <span className="text-slate-500 text-[9px] block mb-0.5 uppercase">Custom Provider API Key</span>
+                        <span className="text-stone-500 text-[9px] block mb-0.5 uppercase">Custom Provider API Key</span>
                         <input
                           type="password"
                           value={customApiKey}
                           onChange={(e) => setCustomApiKey(e.target.value)}
                           placeholder="Paste your custom secret API Key..."
-                          className="w-full bg-[#0f172a] border border-slate-700/60 rounded px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
+                          className="w-full bg-[#1c1410] border border-[#2d231d] rounded px-2.5 py-1.5 text-stone-200 focus:outline-none focus:border-amber-600/40 font-sans"
                         />
-                        <div className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                        <div className="text-[10px] text-stone-500 mt-1 leading-relaxed">
                           *If you select **Google Gemini AI (Default)**, your secret key is automatically provisioned securely from your **Settings &gt; Secrets** environment panel. You can leave this key field blank unless switching to external providers.
                         </div>
                       </div>
                     )}
 
-                    <div className="pt-3 border-t border-slate-800/60 space-y-1 text-slate-400 leading-normal text-[10px]">
-                      <h4 className="font-bold text-slate-300 uppercase text-[9px] mb-1">Cluster Sandbox Telemetry:</h4>
+                    <div className="pt-3 border-t border-[#2d231d]/60 space-y-1 text-stone-400 leading-normal text-[10px]">
+                      <h4 className="font-bold text-stone-300 uppercase text-[9px] mb-1">Cluster Sandbox Telemetry:</h4>
                       <div>• **Runtime Environment**: Cloud Run Sandboxed Node Container</div>
                       <div>• **Node Ingress Port**: 3000 (Forwarded to live preview iframe proxy)</div>
-                      <div>• **Persistence Host**: Local server file storage: <code className="text-[#22c55e]">/data/db.json</code> (Active)</div>
+                      <div>• **Persistence Host**: Local server file storage: <code className="text-amber-500">/data/db.json</code> (Active)</div>
                       <div>• **Memory consolidation logic**: Enabled on chat intercept ticks</div>
                     </div>
 
                     <button
                       type="submit"
                       disabled={savingConfig}
-                      className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold font-mono rounded transition-all cursor-pointer flex items-center justify-center space-x-1 text-[10px]"
+                      className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold font-mono rounded transition-all cursor-pointer flex items-center justify-center space-x-1 text-[10px]"
                     >
                       <Save size={12} />
                       <span>{savingConfig ? 'SYNCHRONIZING...' : 'SYNCHRONIZE_SETTINGS'}</span>

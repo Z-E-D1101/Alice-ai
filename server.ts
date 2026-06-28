@@ -141,6 +141,26 @@ How can I assist you today? Feel free to ask me to calculate equations, save not
     todos: [
       { id: 'td-seed-1', text: 'Test digital clock and global timezone viewer tools', completed: true, createdAt: new Date().toISOString() },
       { id: 'td-seed-2', text: 'Link Telegram bot polling token to live webhook core', completed: false, createdAt: new Date().toISOString() }
+    ],
+    learnings: [
+      {
+        id: 'learn-seed-1',
+        type: 'conversation',
+        title: 'User Preference Matching',
+        description: 'Learned that user prefers orange colors (#ea580c) and modern Swiss/sans-serif typography with cozy terminal widgets.',
+        details: 'Analyzed chat history on 2026-06-28. Synced the UI theme colors from corporate blue to orange-accented dark retro design.',
+        timestamp: new Date().toISOString(),
+        status: 'learned'
+      },
+      {
+        id: 'learn-seed-2',
+        type: 'code_fix',
+        title: 'Syntax Highlighting Implementation',
+        description: 'Installed robust syntax-highlighting for code blocks inside ReactMarkdown renderer.',
+        details: 'Corrected rendering issue where JSON string blocks inside model chat windows lacked color-coded key-value pairs.',
+        timestamp: new Date().toISOString(),
+        status: 'reinforced'
+      }
     ]
   };
 
@@ -166,6 +186,7 @@ How can I assist you today? Feel free to ask me to calculate equations, save not
 }
 
 let db = initDb();
+db.learnings = db.learnings || [];
 
 if (!db.sessions || db.sessions.length === 0) {
   db.sessions = [
@@ -483,6 +504,51 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // API: Add Self-Learning Lesson Item
+  app.post('/api/learnings', async (req, res) => {
+    const { type, title, description, details, status } = req.body;
+    const id = 'learn-' + Math.random().toString(36).slice(2, 8);
+    const item = {
+      id,
+      type: type || 'conversation',
+      title: title || 'New Lesson Learned',
+      description: description || '',
+      details: details || '',
+      timestamp: new Date().toISOString(),
+      status: status || 'learned'
+    };
+    db.learnings = db.learnings || [];
+    db.learnings.unshift(item);
+
+    // Also trigger an interconnected neuron event!
+    const ev = {
+      id: 'neu-' + Math.random().toString(36).slice(2, 8),
+      type: type === 'failure_healing' ? 'skill_fail_correct' as const : 'memory' as const,
+      title: `DYNAMIC LEARNED: ${item.title}`,
+      description: item.description,
+      timestamp: new Date().toISOString()
+    };
+    db.neuronEvents = db.neuronEvents || [];
+    db.neuronEvents.unshift(ev);
+
+    await saveDb();
+    res.json({ success: true, learning: item });
+  });
+
+  // API: Delete Self-Learning Lesson
+  app.delete('/api/learnings/:id', async (req, res) => {
+    db.learnings = (db.learnings || []).filter(l => l.id !== req.params.id);
+    await saveDb();
+    res.json({ success: true });
+  });
+
+  // API: Clear All Learned Lessons
+  app.post('/api/learnings/clear', async (req, res) => {
+    db.learnings = [];
+    await saveDb();
+    res.json({ success: true });
+  });
+
   // API: Add Note
   app.post('/api/notes', async (req, res) => {
     const { title, content } = req.body;
@@ -787,6 +853,7 @@ DIRECTIONS:
 4. When you output a toolCall, the server will intercept, run the tool, and feed the output back to you.
 5. If you learn something core about the user (their likes, job, schedules, daily routine), trigger "add_memory" to store it permanently.
 6. Trigger "create_skill" when the user completes a complicated workflow and asks to save it.
+7. Whenever you output, generate, or modify any source code (e.g., JavaScript, TypeScript, HTML, CSS, JSON, Python, Shell scripts), you MUST ALWAYS enclose it within a proper Markdown code block with the correct language identifier (e.g., \`\`\`typescript, \`\`\`json, \`\`\`html, etc.). Never write plain, raw, or unescaped source code outside code blocks.
 `;
 
     if (triggeredSkill) {
@@ -910,6 +977,7 @@ DIRECTIONS:
 1. Create a brand new custom skill (reusable AI instructions) from any repetitive workflow, calculation, text processing, or automated reporting.
 2. Refine or correct an existing skill if a previous execution failed, was unrelated to what the user wanted, or can be improved.
 3. Formulate a new memory if the user shared critical personal facts, name, preference, or schedules.
+4. Extract structured self-learning items to populate the Self-Learning Dashboard. This represents direct, meta-cognitive, or conceptual knowledge that Alice acquired from the chat (e.g. user interests, programming concepts, solved tasks, code refactoring).
 
 Here is the conversation history:
 ${recentHistory.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')}
@@ -935,6 +1003,15 @@ Format strictly as JSON inside a markdown code block:
   ],
   "memoriesToStore": [
     { "text": "fact to remember", "category": "personal" }
+  ],
+  "learningsToStore": [
+    {
+      "type": "conversation",
+      "title": "Short title of what was learned",
+      "description": "Short description of the lesson learned",
+      "details": "Elaborated background or details about the lesson",
+      "status": "learned"
+    }
   ]
 }
 \`\`\`
@@ -1019,6 +1096,40 @@ Format strictly as JSON inside a markdown code block:
                 type: 'memory',
                 title: `PERSISTED MEMORY`,
                 description: `Logged critical user context: "${m.text}"`,
+                timestamp: new Date().toISOString()
+              };
+              db.neuronEvents = db.neuronEvents || [];
+              db.neuronEvents.unshift(ev);
+              addedEvents.push(ev);
+            }
+          }
+        }
+      }
+
+      // Consolidate self-learning items
+      if (Array.isArray(learningActions.learningsToStore)) {
+        db.learnings = db.learnings || [];
+        for (const l of learningActions.learningsToStore) {
+          if (l.title && l.description) {
+            const exists = db.learnings.some(x => x.title.toLowerCase() === l.title.toLowerCase());
+            if (!exists) {
+              const learnId = 'learn-auto-' + Math.random().toString(36).slice(2, 8);
+              const newItem = {
+                id: learnId,
+                type: l.type || 'conversation',
+                title: l.title,
+                description: l.description,
+                details: l.details || '',
+                timestamp: new Date().toISOString(),
+                status: l.status || 'learned'
+              };
+              db.learnings.unshift(newItem);
+
+              const ev: NeuronEvent = {
+                id: 'neu-' + Math.random().toString(36).slice(2, 8),
+                type: newItem.type === 'failure_healing' ? 'skill_fail_correct' : 'memory',
+                title: `DYNAMIC LEARNED: ${newItem.title}`,
+                description: newItem.description,
                 timestamp: new Date().toISOString()
               };
               db.neuronEvents = db.neuronEvents || [];

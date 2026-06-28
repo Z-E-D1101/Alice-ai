@@ -1,0 +1,6 @@
+{
+  "name": "Alice AI",
+  "description": "A self-improving personal AI assistant with persistent memory, custom skill synthesis, task automation scheduling, and a suite of 40 fully-functional utility tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

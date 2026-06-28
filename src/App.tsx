@@ -381,7 +381,7 @@ export default function App() {
   const [cliInput, setCliInput] = useState<string>('');
   const [cliHistory, setCliHistory] = useState<{ type: 'input' | 'output'; text: string }[]>([
     { type: 'output', text: '==================================================' },
-    { type: 'output', text: '   HERMES PERSONAL AI CORE NODE V4.12' },
+    { type: 'output', text: '   ALICE AI CORE' },
     { type: 'output', text: '   ALWAYS-ON ENHANCED MULTI-TOOL OS' },
     { type: 'output', text: '==================================================' },
     { type: 'output', text: 'System booted successfully. Host routing Ingress [OK].' },
@@ -604,7 +604,7 @@ export default function App() {
     if (!cliInput.trim()) return;
 
     const cmd = cliInput.trim();
-    setCliHistory(prev => [...prev, { type: 'input', text: `hermes@cloud-node:~$ ${cmd}` }]);
+    setCliHistory(prev => [...prev, { type: 'input', text: `alice@cloud-node:~$ ${cmd}` }]);
     setCliInput('');
 
     const lower = cmd.toLowerCase();
@@ -702,7 +702,7 @@ export default function App() {
     }
 
     // Default: Chat proxy
-    setCliHistory(prev => [...prev, { type: 'output', text: `hermes-core: Parsing prompt against local agent NLP model...` }]);
+    setCliHistory(prev => [...prev, { type: 'output', text: `alice-core: Parsing prompt against local agent NLP model...` }]);
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -1236,14 +1236,14 @@ export default function App() {
         >
           <RefreshCw size={36} />
         </motion.div>
-        <h2 className="text-base font-semibold tracking-wider text-slate-200">BOOTING HERMES AI CORE</h2>
-        <p className="text-[10px] text-slate-500 mt-1">Connecting microservice clusters & loading 40-tool local repositories...</p>
+        <h2 className="text-base font-semibold tracking-wider text-slate-200">Starting Alice...</h2>
+        <p className="text-[10px] text-slate-500 mt-1">Loading memory, skills, and tools...</p>
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col lg:flex-row bg-[#130f0c] text-stone-300 font-sans selection:bg-amber-600/20 selection:text-amber-400 overflow-hidden">
+    <div className="h-screen w-screen flex flex-col lg:flex-row bg-[#0f0d0b] text-stone-300 font-sans selection:bg-amber-600/20 selection:text-amber-400 overflow-hidden">
       
       {/* Mobile Header (only visible on mobile/tablet) */}
       <div className="lg:hidden h-14 bg-[#140f0c] border-b border-[#2d231d] flex items-center justify-between px-4 shrink-0 select-none z-30">
@@ -1287,155 +1287,46 @@ export default function App() {
       >
         
         {/* Brand Header */}
-        <div className="p-4 border-b border-[#2d231d] flex items-center space-x-2.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#ea580c] shadow-lg shadow-orange-500/20"></span>
-          <div>
-            <span className="text-sm font-bold tracking-widest text-[#f5f5f4] uppercase">Alice AI</span>
-            <span className="block text-[8px] font-mono text-stone-500 uppercase mt-0.5">Secure Autonomous Node</span>
-          </div>
+        <div className="px-4 py-5 flex items-center space-x-2.5">
+          <span className="w-2 h-2 rounded-full bg-[#ea580c]"></span>
+          <span className="text-sm font-semibold text-[#f5f5f4]">Alice</span>
         </div>
 
         {/* Menu Items */}
-        <div className="flex-1 px-2.5 py-4 space-y-1 overflow-y-auto custom-scrollbar">
-          <span className="block px-2 text-[9px] font-mono font-bold tracking-wider text-stone-500 uppercase mb-2">Workspace</span>
-          
-          <button
-            onClick={() => handleSelectTab('terminal')}
-            className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md text-xs font-medium tracking-wide transition-all cursor-pointer ${
-              activeTab === 'terminal' 
-                ? 'bg-[#291f1a] text-amber-400 border border-amber-900/40 font-semibold' 
-                : 'text-stone-400 hover:text-[#f5f5f4] hover:bg-[#201813] border border-transparent'
-            }`}
-          >
-            <TerminalIcon size={14} />
-            <span>Chat</span>
-          </button>
-
-          <button
-            onClick={() => handleSelectTab('brain')}
-            className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md text-xs font-medium tracking-wide transition-all cursor-pointer ${
-              activeTab === 'brain' 
-                ? 'bg-[#291f1a] text-amber-400 border border-amber-900/40 font-semibold' 
-                : 'text-stone-400 hover:text-[#f5f5f4] hover:bg-[#201813] border border-transparent'
-            }`}
-          >
-            <Brain size={14} />
-            <span>Memories</span>
-          </button>
-
-          <button
-            onClick={() => handleSelectTab('tools')}
-            className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md text-xs font-medium tracking-wide transition-all cursor-pointer ${
-              activeTab === 'tools' 
-                ? 'bg-[#291f1a] text-amber-400 border border-amber-900/40 font-semibold' 
-                : 'text-stone-400 hover:text-[#f5f5f4] hover:bg-[#201813] border border-transparent'
-            }`}
-          >
-            <Wrench size={14} />
-            <span>Skills</span>
-          </button>
-
-          <button
-            onClick={() => handleSelectTab('learning')}
-            className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md text-xs font-medium tracking-wide transition-all cursor-pointer ${
-              activeTab === 'learning' 
-                ? 'bg-[#291f1a] text-amber-400 border border-amber-900/40 font-semibold' 
-                : 'text-stone-400 hover:text-[#f5f5f4] hover:bg-[#201813] border border-transparent'
-            }`}
-          >
-            <Layers size={14} />
-            <span>Learning</span>
-          </button>
-
-          <button
-            onClick={() => handleSelectTab('scheduler')}
-            className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md text-xs font-medium tracking-wide transition-all cursor-pointer ${
-              activeTab === 'scheduler' 
-                ? 'bg-[#291f1a] text-amber-400 border border-amber-900/40 font-semibold' 
-                : 'text-stone-400 hover:text-[#f5f5f4] hover:bg-[#201813] border border-transparent'
-            }`}
-          >
-            <Clock size={14} />
-            <span>Schedules</span>
-          </button>
-
-          <button
-            onClick={() => handleSelectTab('settings')}
-            className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md text-xs font-medium tracking-wide transition-all cursor-pointer ${
-              activeTab === 'settings' 
-                ? 'bg-[#291f1a] text-amber-400 border border-amber-900/40 font-semibold' 
-                : 'text-stone-400 hover:text-[#f5f5f4] hover:bg-[#201813] border border-transparent'
-            }`}
-          >
-            <Settings size={14} />
-            <span>Settings</span>
-          </button>
-
-          {/* Sub menu section to preserve other tools */}
-          <div className="pt-4 mt-4 border-t border-[#2d231d]">
-            <span className="block px-2 text-[9px] font-mono font-bold tracking-wider text-stone-500 uppercase mb-2">Utilities</span>
-            
+        <div className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto custom-scrollbar">
+          {[
+            { tab: 'terminal' as const, icon: <MessageSquare size={15} />, label: 'Chat' },
+            { tab: 'brain' as const, icon: <Brain size={15} />, label: 'Memories' },
+            { tab: 'tools' as const, icon: <Wrench size={15} />, label: 'Skills' },
+            { tab: 'learning' as const, icon: <Layers size={15} />, label: 'Learning' },
+            { tab: 'scheduler' as const, icon: <Clock size={15} />, label: 'Schedules' },
+            { tab: 'settings' as const, icon: <Settings size={15} />, label: 'Settings' },
+          ].map(({ tab, icon, label }) => (
             <button
-              onClick={() => handleSelectTab('diary')}
-              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md text-xs font-medium tracking-wide transition-all cursor-pointer ${
-                activeTab === 'diary' 
-                  ? 'bg-[#291f1a] text-amber-400 border border-amber-900/40 font-semibold' 
-                  : 'text-stone-400 hover:text-[#f5f5f4] hover:bg-[#201813] border border-transparent'
+              key={tab}
+              onClick={() => handleSelectTab(tab)}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm transition-all cursor-pointer ${
+                activeTab === tab
+                  ? 'bg-[#251d17] text-[#f5f5f4] font-medium'
+                  : 'text-stone-400 hover:text-[#f5f5f4] hover:bg-[#1e1713]'
               }`}
             >
-              <BookOpen size={14} />
-              <span>Diary Notes</span>
+              {icon}
+              <span>{label}</span>
             </button>
-
-            <button
-              onClick={() => handleSelectTab('checklist')}
-              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md text-xs font-medium tracking-wide transition-all cursor-pointer ${
-                activeTab === 'checklist' 
-                  ? 'bg-[#291f1a] text-amber-400 border border-amber-900/40 font-semibold' 
-                  : 'text-stone-400 hover:text-[#f5f5f4] hover:bg-[#201813] border border-transparent'
-              }`}
-            >
-              <CheckSquare size={14} />
-              <span>Checklist</span>
-            </button>
-
-            <button
-              onClick={() => handleSelectTab('gateway')}
-              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-md text-xs font-medium tracking-wide transition-all cursor-pointer ${
-                activeTab === 'gateway' 
-                  ? 'bg-[#291f1a] text-amber-400 border border-amber-900/40 font-semibold' 
-                  : 'text-stone-400 hover:text-[#f5f5f4] hover:bg-[#201813] border border-transparent'
-              }`}
-            >
-              <Globe size={14} />
-              <span>Bot Gateways</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Footer info & clock */}
-        <div className="px-4 py-3 border-t border-[#2d231d] bg-[#140f0c] text-[10px] font-mono text-stone-500 space-y-1 select-text">
-          <div className="flex items-center justify-between">
-            <span className="uppercase text-[8px] tracking-wider text-stone-600">UTC CLOCK</span>
-            <span className="text-[#e0a96d]">{currentTime || 'SYNCING...'}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="uppercase text-[8px] tracking-wider text-stone-600">PROVIDER</span>
-            <span className="text-amber-500 font-semibold uppercase">{aiProvider}</span>
-          </div>
+          ))}
         </div>
 
         {/* Sign out */}
         <button
           onClick={() => {
-            if (confirm("Sign out of Alice AI? (This will simulate secure termination of session token)")) {
-              alert("Session terminated securely. Re-routing back to container authentication portal.");
+            if (confirm("Sign out of Alice?")) {
               window.location.reload();
             }
           }}
-          className="w-full flex items-center space-x-2.5 px-4 py-3 border-t border-[#2d231d] hover:bg-[#201813] text-stone-400 hover:text-rose-400 transition-all font-mono text-[11px]"
+          className="w-full flex items-center space-x-3 px-5 py-4 border-t border-[#2d231d] hover:bg-[#1e1713] text-stone-500 hover:text-stone-300 transition-all text-sm"
         >
-          <LogOut size={13} />
+          <LogOut size={15} />
           <span>Sign out</span>
         </button>
       </nav>
@@ -1464,24 +1355,23 @@ export default function App() {
                         className="fixed inset-0 bg-black/60 z-30 lg:hidden"
                         onClick={() => setHistorySidebarOpen(false)}
                       />
-                      <div className="w-64 lg:w-60 shrink-0 bg-[#16120f] border-r border-[#2d231d] flex flex-col h-full overflow-hidden select-none fixed lg:relative inset-y-0 left-0 z-40 lg:z-auto transition-transform duration-300">
-                        <div className="p-4 flex items-center justify-between border-b border-[#2d231d]">
-                          <span className="text-xs font-bold font-mono uppercase tracking-wider text-stone-400">History</span>
+                      <div className="w-64 lg:w-56 shrink-0 bg-[#110e0b] border-r border-[#2d231d] flex flex-col h-full overflow-hidden select-none fixed lg:relative inset-y-0 left-0 z-40 lg:z-auto transition-transform duration-300">
+                        <div className="px-4 py-3 flex items-center justify-between border-b border-[#2d231d]">
+                          <span className="text-sm font-semibold text-stone-300">History</span>
                           <button
                             onClick={() => setHistorySidebarOpen(false)}
-                            className="p-1 rounded text-stone-400 hover:text-[#f5f5f4] hover:bg-[#201813] transition-all cursor-pointer"
-                            title="Hide History Sidebar"
+                            className="p-1 rounded text-stone-500 hover:text-stone-300 hover:bg-[#1e1713] transition-all cursor-pointer"
                           >
-                            <ChevronLeft size={14} />
+                            <ChevronLeft size={15} />
                           </button>
                         </div>
 
                         <div className="p-3">
                           <button
                             onClick={handleNewChat}
-                            className="w-full py-2 px-3 border border-[#3e3026] hover:border-[#ea580c]/60 bg-[#241d18] hover:bg-[#2c221b] text-[#f5f5f4] text-xs font-semibold rounded-md transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-sm"
+                            className="w-full py-2 px-3 border border-[#2d231d] hover:border-[#3e3026] bg-[#1a1612] hover:bg-[#201813] text-stone-300 text-sm rounded-lg transition-all flex items-center justify-center space-x-2 cursor-pointer"
                           >
-                            <Plus size={13} />
+                            <Plus size={14} />
                             <span>New chat</span>
                           </button>
                         </div>
@@ -1543,50 +1433,60 @@ export default function App() {
                   {/* Main Chat Area */}
                   <div className="flex-1 flex flex-col h-full overflow-hidden relative bg-[#1e1713]">
                     
-                    <div className="flex-1 flex flex-col bg-[#17120e] h-full overflow-hidden relative sm:border-l sm:border-r lg:border-l-0 lg:border-r-0 border-[#2d231d]">
+                    <div className="flex-1 flex flex-col bg-[#0f0d0b] h-full overflow-hidden relative sm:border-l sm:border-r lg:border-l-0 lg:border-r-0 border-[#2d231d]">
                       {/* Chat Head */}
-                      <div className="px-4 py-3.5 border-b border-[#2d231d] bg-[#140f0c] flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
+                      <div className="px-4 py-2.5 border-b border-[#2d231d] bg-[#0f0d0b] flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
                           {!historySidebarOpen && (
                             <button
                               onClick={() => setHistorySidebarOpen(true)}
-                              className="hidden lg:flex p-1.5 rounded hover:bg-[#201813] text-stone-400 hover:text-amber-400 transition-all cursor-pointer"
-                              title="Show History Sidebar"
+                              className="hidden lg:flex p-1 rounded hover:bg-[#1e1713] text-stone-500 hover:text-stone-300 transition-all cursor-pointer mr-1"
                             >
-                              <ChevronRight size={15} />
+                              <ChevronRight size={14} />
                             </button>
                           )}
-                          <span className="w-2 h-2 rounded-full bg-[#ea580c] shadow-lg shadow-orange-500/20"></span>
-                          <h3 className="text-xs font-mono font-semibold text-stone-200 tracking-wider">ALICE_REASONING_CORE</h3>
+                          <button
+                            onClick={() => handleSelectTab('settings')}
+                            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-[#1a1612] border border-[#2d231d] hover:border-[#3e3026] text-stone-300 text-xs transition-all cursor-pointer"
+                            title="API Configuration"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#ea580c]"></span>
+                            <span>API (default)</span>
+                            <ChevronRight size={10} className="rotate-90 opacity-50" />
+                          </button>
                         </div>
                         
-                        {/* Chat Controls */}
                         <div className="flex items-center space-x-2">
                           <button
-                            onClick={handleClearSession}
-                            className="px-2 py-1 rounded bg-[#201813] border border-[#30241e] hover:border-amber-600/40 text-stone-400 hover:text-amber-400 transition-all text-[10px] font-mono flex items-center space-x-1 cursor-pointer"
-                            title="Clear current chat messages"
+                            onClick={() => handleSelectTab('tools')}
+                            className="px-2.5 py-1.5 rounded-md bg-[#1a1612] border border-[#2d231d] hover:border-[#3e3026] text-stone-400 hover:text-stone-200 transition-all text-xs flex items-center space-x-1.5 cursor-pointer"
+                            title="Save current conversation as a skill"
                           >
-                            <Trash2 size={10} />
+                            <Save size={11} />
+                            <span className="hidden sm:inline">Save as skill</span>
+                          </button>
+                          <button
+                            onClick={handleClearSession}
+                            className="px-2.5 py-1.5 rounded-md bg-[#1a1612] border border-[#2d231d] hover:border-[#3e3026] text-stone-400 hover:text-stone-200 transition-all text-xs flex items-center space-x-1.5 cursor-pointer"
+                            title="Clear chat"
+                          >
+                            <Trash2 size={11} />
                             <span className="hidden sm:inline">Clear</span>
                           </button>
                         </div>
                       </div>
 
                       {/* Messages Body */}
-                      <div className="flex-1 overflow-y-auto py-6 px-4 custom-scrollbar bg-[#17120e]">
-                        <div className="w-full max-w-3xl mx-auto space-y-6">
+                      <div className="flex-1 overflow-y-auto py-8 px-4 custom-scrollbar bg-[#0f0d0b]">
+                        <div className="w-full max-w-2xl mx-auto space-y-5">
                           
-                          {/* Central Greeting Dotted Card */}
+                          {/* Central Greeting */}
                           {(!db?.messages || db.messages.filter(m => m.role !== 'system').length === 0) ? (
-                            <div className="h-full flex flex-col items-center justify-center p-6 text-center select-none">
-                              <div className="max-w-md border border-dashed border-[#3e3026] rounded-xl p-8 bg-[#1a1411]/80 text-stone-300 space-y-3 shadow-lg">
-                                <span className="inline-block p-2 bg-[#2d211a] text-amber-500 rounded-lg">
-                                  <Bot size={20} />
-                                </span>
-                                <h3 className="text-sm font-semibold text-[#f5f5f4]">Say hello to Alice AI.</h3>
-                                <p className="text-xs text-stone-400 leading-relaxed font-mono">
-                                  I will remember details, notes, skills, and preferences across chat sessions automatically. Start typing to begin your assistant-guided container workflow.
+                            <div className="h-full flex flex-col items-center justify-center py-16 text-center select-none">
+                              <div className="max-w-lg rounded-2xl p-8 bg-[#161210] border border-[#2a2018] text-stone-300 space-y-3">
+                                <h3 className="text-lg font-semibold text-[#f5f5f4]">Say hi to Alice.</h3>
+                                <p className="text-sm text-stone-400 leading-relaxed italic">
+                                  I'll remember what matters across sessions — facts about you, your preferences, your goals. Try telling me about yourself, or ask me to help with something.
                                 </p>
                               </div>
                             </div>
@@ -1672,19 +1572,25 @@ export default function App() {
                                 </div>
                               ))
                           )}
-                          {/* Streaming bubble */}
-                          {chatSending && (streamingContent || streamingPhase === 'tool') && (
+                          {/* Streaming / Thinking bubble */}
+                          {chatSending && (
                             <div className="flex justify-start">
-                              <div className="max-w-[85%] rounded-lg rounded-tl-none px-3.5 py-2.5 shadow-md bg-[#201813] border border-[#2d231d] text-stone-200">
-                                <div className="flex items-center space-x-1 mb-1 text-[9px] font-mono opacity-50">
-                                  <span>ALICE</span>
-                                  <span>•</span>
-                                  <span className="animate-pulse text-amber-500">●</span>
+                              <div className="max-w-[85%] rounded-lg rounded-tl-none px-4 py-3 shadow-md bg-[#161210] border border-[#2a2018] text-stone-200">
+                                <div className="flex items-center space-x-1.5 mb-2 text-[10px] font-mono text-stone-500">
+                                  <span>Alice</span>
+                                  <span className="animate-pulse text-[#ea580c]">●</span>
                                 </div>
                                 {streamingPhase === 'tool' && (
-                                  <div className="text-[10px] font-mono text-amber-500 flex items-center gap-1.5 mb-1.5">
+                                  <div className="text-[11px] font-mono text-amber-400 flex items-center gap-1.5 mb-2">
                                     <span className="animate-spin inline-block">⚙</span>
                                     <span>running <b>{streamingTool}</b>...</span>
+                                  </div>
+                                )}
+                                {!streamingContent && streamingPhase !== 'tool' && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 bg-stone-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                    <span className="w-1.5 h-1.5 bg-stone-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                    <span className="w-1.5 h-1.5 bg-stone-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                                   </div>
                                 )}
                                 {streamingContent && (
@@ -1695,7 +1601,7 @@ export default function App() {
                                           const match = /language-(\w+)/.exec(className || '');
                                           const isInline = !match && !String(children).includes('\n');
                                           return isInline ? (
-                                            <code className="px-1.5 py-0.5 bg-[#140f0c] text-amber-500 rounded font-mono text-xs border border-[#2d231d]/40" {...props}>{children}</code>
+                                            <code className="px-1.5 py-0.5 bg-[#0f0d0b] text-amber-400 rounded font-mono text-xs border border-[#2d231d]/40" {...props}>{children}</code>
                                           ) : (
                                             <SyntaxHighlighter code={String(children).replace(/\n$/, '')} language={match ? match[1] : 'text'} />
                                           );
@@ -1708,9 +1614,9 @@ export default function App() {
                                     >
                                       {stripToolCallBlocks(streamingContent)}
                                     </ReactMarkdown>
+                                    <span className="inline-block w-1.5 h-3.5 bg-[#ea580c] animate-pulse rounded-sm align-middle ml-0.5" />
                                   </div>
                                 )}
-                                <span className="inline-block w-1.5 h-3.5 bg-amber-500 animate-pulse rounded-sm align-middle ml-0.5" />
                               </div>
                             </div>
                           )}
@@ -1719,22 +1625,35 @@ export default function App() {
                       </div>
 
                       {/* Chat Footer Input */}
-                      <div className="p-4 border-t border-[#2d231d] bg-[#140f0c]">
-                        <form onSubmit={handleChatSend} className="w-full max-w-3xl mx-auto">
-                          <div className="flex items-center space-x-3 bg-[#1a1411] border border-[#2d231d] rounded-xl px-4 py-3 shadow-md focus-within:border-amber-600/60 transition-all">
-                            <input
-                              type="text"
+                      <div className="p-4 border-t border-[#2d231d] bg-[#0f0d0b]">
+                        <form onSubmit={handleChatSend} className="w-full max-w-2xl mx-auto">
+                          <div className="flex items-end space-x-3 bg-[#161210] border border-[#2a2018] rounded-2xl px-4 py-3 shadow-md focus-within:border-[#ea580c]/40 transition-all">
+                            <textarea
                               value={chatInput}
-                              onChange={(e) => setChatInput(e.target.value)}
-                              placeholder="Ask Alice anything..."
-                              className="flex-1 bg-transparent text-sm text-stone-200 focus:outline-none placeholder-stone-500 font-sans"
+                              onChange={(e) => {
+                                setChatInput(e.target.value);
+                                e.target.style.height = 'auto';
+                                e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                  e.preventDefault();
+                                  if (chatInput.trim() && !chatSending) {
+                                    handleChatSend(e as any);
+                                  }
+                                }
+                              }}
+                              placeholder="Message Alice... (Enter to send, Shift+Enter for newline)"
+                              rows={1}
+                              className="flex-1 bg-transparent text-sm text-stone-200 focus:outline-none placeholder-stone-500 font-sans resize-none overflow-hidden leading-relaxed"
+                              style={{ minHeight: '24px', maxHeight: '160px' }}
                             />
                             {chatSending ? (
                               <button
                                 type="button"
                                 onClick={handleAbort}
-                                className="p-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg transition-all cursor-pointer flex items-center justify-center shrink-0 shadow"
-                                title="Abort Thinking"
+                                className="p-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0"
+                                title="Stop"
                               >
                                 <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                                   <rect x="5" y="5" width="14" height="14" rx="2" />
@@ -1744,15 +1663,12 @@ export default function App() {
                               <button
                                 type="submit"
                                 disabled={!chatInput.trim()}
-                                className="p-1.5 bg-amber-600 hover:bg-amber-500 disabled:bg-[#241d18] disabled:text-stone-700 text-white rounded-lg transition-all cursor-pointer flex items-center justify-center shrink-0 shadow"
+                                className="p-2 bg-[#ea580c] hover:bg-[#c2410c] disabled:bg-[#1e1713] disabled:text-stone-600 text-white rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0"
                               >
                                 <Send size={14} />
                               </button>
                             )}
                           </div>
-                          <p className="text-[10px] text-stone-500 text-center mt-2 font-mono">
-                            Alice can execute live bash shell scripts, search Google, remember facts, and write container configurations.
-                          </p>
                         </form>
                       </div>
                     </div>

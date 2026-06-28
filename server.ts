@@ -28,7 +28,7 @@ function initDb(): AppDatabase {
       {
         id: 'init-msg',
         role: 'system',
-        content: `You are Hermes Personal AI Core, an advanced, self-improving personal assistant with 40 built-in utility tools.
+        content: `You are Alice Personal AI Core, an advanced, self-improving personal assistant with 40 built-in utility tools.
 You are running on a cheap cloud node. You remember conversations, build a profile of the user, and synthesize custom reusable skills.
 When the user asks you to perform operations that map to your tools, respond with a JSON block to call the tool.
 To run a tool, you MUST return a valid JSON block inside your text (enclosed in markdown code blocks) like:
@@ -60,7 +60,7 @@ Do not guess parameters, check the tool definitions. You can execute multiple to
       {
         id: 'welcome-msg',
         role: 'model',
-        content: `Hello! I am **Hermes Core**, your self-improving, persistent personal assistant. 
+        content: `Hello! I am **Alice**, your self-improving, persistent personal assistant. 
 
 I've booted my engine on your secure cloud node. I have **40 specialized tools** ready, long-term memory logging, and the ability to synthesize brand new skills. 
 
@@ -88,7 +88,7 @@ How can I assist you today? Feel free to ask me to calculate equations, save not
         description: 'Compiles activity checkmarks, tool logs, and note counts into a clean markdown dashboard.',
         triggerPrompt: 'summarize core activity',
         systemPrompt: 'Provide a clean, elegant summary of tasks completed, active diary notes, and diagnostics reports. Format with terminal spacing.',
-        outputTemplate: '# HERMES DAILY ACTIVITY REPORT\n{payload}',
+        outputTemplate: '# ALICE DAILY ACTIVITY REPORT\n{payload}',
         createdAt: new Date().toISOString()
       }
     ],
@@ -245,7 +245,7 @@ setInterval(async () => {
         simulatedResult += `System Status: CPU 1.8% | Heap 44MB | Node server running perfectly.\n`;
       }
       if (schedule.taskPrompt.toLowerCase().includes('rss')) {
-        simulatedResult += `HN Top: "Show HN: Hermes Personal AI Assistant" (424 pts)\n`;
+        simulatedResult += `HN Top: "Show HN: Alice Personal AI Assistant" (424 pts)\n`;
       }
       simulatedResult += `Execution Completed successfully at ${now.toLocaleTimeString()}.\n`;
 
@@ -824,7 +824,7 @@ USER PERSONA PROFILE (Synchronize your reply based on this):
 
     const activeSkills = db.skills.map(s => `- ${s.name}: ${s.description} (trigger: "${s.triggerPrompt}")`).join('\n');
 
-    let systemInstruction = `You are Hermes Personal AI Core, an always-on, self-improving personal assistant.
+    let systemInstruction = `You are Alice Personal AI Core, an always-on, self-improving personal assistant.
 We are running on a secure cloud node container. You have 40 built-in utility tools.
 You MUST refer to the user profile and memories to adapt your personality, details, and layout structure (the user prefers terminal slate aesthetics and high-fidelity output).
 
@@ -869,7 +869,7 @@ DIRECTIONS:
     thinkingSteps.push({
       id: 'step-init',
       icon: '⚙️',
-      title: 'initializing Hermes reasoning engine...',
+      title: 'initializing Alice reasoning engine...',
       duration: '0.1s'
     });
 
@@ -973,7 +973,7 @@ DIRECTIONS:
     // Auto-learning Skill Synthesizer Engine & Memory consolidation
     try {
       const recentHistory = db.messages.filter(m => m.role === 'user' || m.role === 'model').slice(-6);
-      const learningPrompt = `You are the Hermes Self-Improving Learning Core. Your job is to analyze the recent conversation and decide if you should:
+      const learningPrompt = `You are the Alice Self-Improving Learning Core. Your job is to analyze the recent conversation and decide if you should:
 1. Create a brand new custom skill (reusable AI instructions) from any repetitive workflow, calculation, text processing, or automated reporting.
 2. Refine or correct an existing skill if a previous execution failed, was unrelated to what the user wanted, or can be improved.
 3. Formulate a new memory if the user shared critical personal facts, name, preference, or schedules.
@@ -1173,12 +1173,20 @@ Format strictly as JSON inside a markdown code block:
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
+    // Send initial comment to establish connection and flush proxy buffers
+    res.write(': connected\n\n');
+    (res as any).flush?.();
+
     const send = (data: object) => {
-      try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch (_) {}
+      try {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        (res as any).flush?.();
+      } catch (_) {}
     };
 
     const activeSessionId = db.activeSessionId || 'session-default';
@@ -1213,7 +1221,7 @@ Format strictly as JSON inside a markdown code block:
     const profileContext = `USER PERSONA PROFILE:\n- Name: ${db.profile.name}\n- Bio: ${db.profile.bio}\n- Profession: ${db.profile.profession}\n- Preferences: ${db.profile.preferences.join(', ')}\n- Memories: ${db.memories.map(m => m.text).join(' | ')}`;
     const activeSkills = db.skills.map(s => `- ${s.name}: ${s.description} (trigger: "${s.triggerPrompt}")`).join('\n');
 
-    let systemInstruction = `You are Hermes Personal AI Core, an always-on, self-improving personal assistant running on a secure cloud node.\n${profileContext}\n\nAVAILABLE 40 SYSTEM TOOLS:\n${toolSummaryString}\n\nACTIVE CUSTOM SKILLS:\n${activeSkills}\n\nDIRECTIONS:\n1. For operations like calculation, weather, notes, search, encoding, diagnostics — call the tool via JSON block.\n2. Tool call format (ONLY for actual tool invocations, never for normal replies):\n\`\`\`json\n{\n  "toolCall": { "name": "tool_name", "parameters": {} }\n}\n\`\`\`\n3. DO NOT wrap conversational text in code blocks. Only use code blocks for actual code or tool calls.\n4. When you output a toolCall, the server intercepts, runs the tool, and feeds output back.\n5. Store important user facts with "add_memory".`;
+    let systemInstruction = `You are Alice Personal AI Core, an always-on, self-improving personal assistant running on a secure cloud node.\n${profileContext}\n\nAVAILABLE 40 SYSTEM TOOLS:\n${toolSummaryString}\n\nACTIVE CUSTOM SKILLS:\n${activeSkills}\n\nDIRECTIONS:\n1. For operations like calculation, weather, notes, search, encoding, diagnostics — call the tool via JSON block.\n2. Tool call format (ONLY for actual tool invocations, never for normal replies):\n\`\`\`json\n{\n  "toolCall": { "name": "tool_name", "parameters": {} }\n}\n\`\`\`\n3. DO NOT wrap conversational text in code blocks. Only use code blocks for actual code or tool calls.\n4. When you output a toolCall, the server intercepts, runs the tool, and feeds output back.\n5. Store important user facts with "add_memory".`;
 
     if (triggeredSkill) {
       systemInstruction += `\n\n[SKILL: ${triggeredSkill.name}]\n${triggeredSkill.systemPrompt}`;
@@ -1225,7 +1233,7 @@ Format strictly as JSON inside a markdown code block:
       .map((m: any) => ({ role: m.role === 'user' ? 'user' as const : 'model' as const, content: m.content }));
 
     const startOverall = Date.now();
-    const thinkingSteps: ThinkingStep[] = [{ id: 'step-init', icon: '⚙️', title: 'initializing Hermes reasoning engine...', duration: '0.1s' }];
+    const thinkingSteps: ThinkingStep[] = [{ id: 'step-init', icon: '⚙️', title: 'initializing Alice reasoning engine...', duration: '0.1s' }];
     const executedLogs: ToolCallLog[] = [];
     let responseText = '';
 
@@ -1414,7 +1422,7 @@ The weather station registers clear skies and mild temperatures.`;
   "toolCall": {
     "name": "ascii_art",
     "parameters": {
-      "text": "HERMES"
+      "text": "ALICE"
     }
   }
 }
@@ -1448,7 +1456,7 @@ Here is what I can do for you right now:
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Hermes Core running at http://0.0.0.0:${PORT}`);
+    console.log(`Alice AI running at http://0.0.0.0:${PORT}`);
   });
 }
 

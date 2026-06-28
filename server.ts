@@ -1165,6 +1165,197 @@ Format strictly as JSON inside a markdown code block:
     res.json({ messages: db.messages });
   });
 
+  // API: Streaming Chat Endpoint via SSE
+  app.post('/api/chat/stream', async (req, res) => {
+    const { messages: clientMessages } = req.body;
+    if (!clientMessages || clientMessages.length === 0) {
+      return res.status(400).json({ error: 'No message history provided.' });
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const send = (data: object) => {
+      try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch (_) {}
+    };
+
+    const activeSessionId = db.activeSessionId || 'session-default';
+    let session = db.sessions?.find(s => s.id === activeSessionId);
+    if (!session) {
+      session = { id: activeSessionId, title: 'Conversation', createdAt: new Date().toISOString(), messages: db.messages || [] };
+      db.sessions = db.sessions || [];
+      db.sessions.push(session);
+    }
+
+    const userMessage = clientMessages[clientMessages.length - 1];
+    session.messages.push(userMessage);
+    const userMsgsCount = session.messages.filter((m: any) => m.role === 'user').length;
+    if (userMsgsCount === 1) {
+      const words = userMessage.content.trim().split(/\s+/).slice(0, 4).join(' ');
+      session.title = words.length > 25 ? words.slice(0, 25) + '...' : words || 'New Chat';
+    }
+    db.messages = session.messages;
+    await saveDb();
+
+    let triggeredSkill = null;
+    for (const skill of db.skills) {
+      if (userMessage.content.toLowerCase().includes(skill.triggerPrompt.toLowerCase())) {
+        triggeredSkill = skill; break;
+      }
+    }
+
+    const toolSummaryString = TOOL_DEFINITIONS.map(t =>
+      `- ${t.name}: ${t.description} (params: ${t.parameters.map(p => `${p.name} [${p.type}]${p.required ? '*' : ''}`).join(', ')})`
+    ).join('\n');
+
+    const profileContext = `USER PERSONA PROFILE:\n- Name: ${db.profile.name}\n- Bio: ${db.profile.bio}\n- Profession: ${db.profile.profession}\n- Preferences: ${db.profile.preferences.join(', ')}\n- Memories: ${db.memories.map(m => m.text).join(' | ')}`;
+    const activeSkills = db.skills.map(s => `- ${s.name}: ${s.description} (trigger: "${s.triggerPrompt}")`).join('\n');
+
+    let systemInstruction = `You are Hermes Personal AI Core, an always-on, self-improving personal assistant running on a secure cloud node.\n${profileContext}\n\nAVAILABLE 40 SYSTEM TOOLS:\n${toolSummaryString}\n\nACTIVE CUSTOM SKILLS:\n${activeSkills}\n\nDIRECTIONS:\n1. For operations like calculation, weather, notes, search, encoding, diagnostics — call the tool via JSON block.\n2. Tool call format (ONLY for actual tool invocations, never for normal replies):\n\`\`\`json\n{\n  "toolCall": { "name": "tool_name", "parameters": {} }\n}\n\`\`\`\n3. DO NOT wrap conversational text in code blocks. Only use code blocks for actual code or tool calls.\n4. When you output a toolCall, the server intercepts, runs the tool, and feeds output back.\n5. Store important user facts with "add_memory".`;
+
+    if (triggeredSkill) {
+      systemInstruction += `\n\n[SKILL: ${triggeredSkill.name}]\n${triggeredSkill.systemPrompt}`;
+    }
+
+    const messagesHistory = db.messages
+      .filter((m: any) => m.role === 'user' || m.role === 'model')
+      .slice(-12)
+      .map((m: any) => ({ role: m.role === 'user' ? 'user' as const : 'model' as const, content: m.content }));
+
+    const startOverall = Date.now();
+    const thinkingSteps: ThinkingStep[] = [{ id: 'step-init', icon: '⚙️', title: 'initializing Hermes reasoning engine...', duration: '0.1s' }];
+    const executedLogs: ToolCallLog[] = [];
+    let responseText = '';
+
+    const provider = db.config.provider;
+    const geminiKey = process.env.GEMINI_API_KEY || db.config.customApiKey;
+
+    const streamGemini = async (instruction: string, contents: { role: 'user' | 'model'; content: string }[]) => {
+      const ai = new GoogleGenAI({ apiKey: geminiKey!, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
+      const chatContents = contents.map(m => ({ role: m.role, parts: [{ text: m.content }] }));
+      const stream = await ai.models.generateContentStream({
+        model: db.config.modelName || 'gemini-2.5-flash',
+        contents: chatContents,
+        config: { systemInstruction: instruction }
+      });
+      let full = '';
+      for await (const chunk of stream) {
+        if (chunk.text) {
+          full += chunk.text;
+          send({ type: 'chunk', text: chunk.text });
+        }
+      }
+      return full;
+    };
+
+    try {
+      if (provider === 'gemini' && geminiKey) {
+        try {
+          responseText = await streamGemini(systemInstruction, messagesHistory);
+        } catch (e) {
+          responseText = simulateLocalReasoning(userMessage.content, db);
+          send({ type: 'chunk', text: responseText });
+        }
+      } else {
+        try {
+          responseText = await getAICompletion(systemInstruction, messagesHistory, db);
+          send({ type: 'chunk', text: responseText });
+        } catch (e) {
+          responseText = simulateLocalReasoning(userMessage.content, db);
+          send({ type: 'chunk', text: responseText });
+        }
+      }
+
+      const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        try {
+          const payload = JSON.parse(jsonMatch[1].trim());
+          if (payload.toolCall) {
+            const { name, parameters } = payload.toolCall;
+            send({ type: 'tool_start', tool: name });
+
+            const toolStart = Date.now();
+            const toolResult = await executeTool(name, parameters || {}, db, saveDb);
+            const toolDuration = Date.now() - toolStart;
+
+            executedLogs.push({ toolName: name, parameters: parameters || {}, result: toolResult, status: 'success', durationMs: toolDuration });
+            thinkingSteps.push({ id: 'step-exec-' + name, icon: '⚙️', title: name, detail: JSON.stringify(parameters || {}).slice(0, 50), duration: `${(toolDuration / 1000).toFixed(1)}s` });
+
+            send({ type: 'tool_done', tool: name });
+            send({ type: 'clear' });
+
+            const followUpContents: { role: 'user' | 'model'; content: string }[] = [
+              ...messagesHistory,
+              { role: 'model', content: responseText },
+              { role: 'user', content: `[SYSTEM TOOL REPORT: ${name}]\n${toolResult}\n\nSummarize the tool output elegantly and explain what was done.` }
+            ];
+
+            responseText = '';
+            if (provider === 'gemini' && geminiKey) {
+              try {
+                responseText = await streamGemini(systemInstruction, followUpContents);
+              } catch (e) {
+                responseText = `**${name}** executed.\n\n${toolResult}`;
+                send({ type: 'chunk', text: responseText });
+              }
+            } else {
+              try {
+                responseText = await getAICompletion(systemInstruction, followUpContents, db);
+                send({ type: 'chunk', text: responseText });
+              } catch (e) {
+                responseText = `**${name}** executed.\n\n${toolResult}`;
+                send({ type: 'chunk', text: responseText });
+              }
+            }
+          }
+        } catch (e) {
+          console.error('[STREAM TOOL ERROR]', e);
+        }
+      }
+    } catch (err) {
+      console.error('[STREAM CHAT ERROR]', err);
+      responseText = simulateLocalReasoning(userMessage.content, db);
+      send({ type: 'clear' });
+      send({ type: 'chunk', text: responseText });
+    }
+
+    const totalDuration = parseFloat(((Date.now() - startOverall) / 1000).toFixed(1));
+    const modelMessage: Message = {
+      id: 'msg-' + Math.random().toString(36).slice(2, 8),
+      role: 'model',
+      content: responseText,
+      timestamp: new Date().toISOString(),
+      toolCalls: executedLogs.length > 0 ? executedLogs : undefined,
+      thinkingSteps,
+      thinkingTime: totalDuration
+    };
+
+    db.messages.push(modelMessage);
+
+    (async () => {
+      try {
+        const recentHistory = db.messages.filter(m => m.role === 'user' || m.role === 'model').slice(-6);
+        const learningPrompt = `Analyze this conversation and output JSON with any learning actions:\n\`\`\`json\n{"skillsToCreate":[],"skillsToUpdate":[],"memoriesToStore":[],"learningsToStore":[]}\n\`\`\`\nConversation:\n${recentHistory.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')}`;
+        const learningOutput = await getAICompletion(learningPrompt, [], db);
+        const jm = learningOutput.match(/```json\s*([\s\S]*?)\s*```/) || [null, learningOutput];
+        const actions = JSON.parse((jm[1] || learningOutput).trim());
+        if (Array.isArray(actions.memoriesToStore)) {
+          for (const m of actions.memoriesToStore) {
+            if (m.text && !db.memories.some((x: any) => x.text.toLowerCase() === m.text.toLowerCase())) {
+              db.memories.unshift({ id: 'mem-auto-' + Math.random().toString(36).slice(2, 8), text: m.text, category: m.category || 'other', timestamp: new Date().toISOString() });
+            }
+          }
+        }
+      } catch (_) {}
+    })();
+
+    await saveDb();
+    send({ type: 'done', message: modelMessage });
+    res.end();
+  });
+
   // Rules-based smart reasoning simulation (Hermes Local Engine)
   function simulateLocalReasoning(prompt: string, database: AppDatabase): string {
     const low = prompt.toLowerCase();

@@ -365,6 +365,9 @@ export default function App() {
   // Chat/CLI State
   const [chatInput, setChatInput] = useState<string>('');
   const [chatSending, setChatSending] = useState<boolean>(false);
+  const [streamingContent, setStreamingContent] = useState<string>('');
+  const [streamingPhase, setStreamingPhase] = useState<'streaming' | 'tool' | null>(null);
+  const [streamingTool, setStreamingTool] = useState<string>('');
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -464,7 +467,7 @@ export default function App() {
       chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
     return () => clearTimeout(timer);
-  }, [db?.messages, chatSending]);
+  }, [db?.messages, chatSending, streamingContent]);
 
   useEffect(() => {
     cliBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -511,6 +514,12 @@ export default function App() {
     setChatSending(false);
   };
 
+  const stripToolCallBlocks = (content: string): string => {
+    return content
+      .replace(/```json\s*\{\s*"toolCall"[\s\S]*?```/g, '')
+      .trim();
+  };
+
   const handleChatSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || chatSending) return;
@@ -522,44 +531,70 @@ export default function App() {
       timestamp: new Date().toISOString()
     };
 
-    // Optimistically update
     if (db) {
-      setDb({
-        ...db,
-        messages: [...db.messages, userMsg]
-      });
+      setDb({ ...db, messages: [...db.messages, userMsg] });
     }
 
-    const payload = chatInput;
     setChatInput('');
     setChatSending(true);
+    setStreamingContent('');
+    setStreamingPhase('streaming');
+    setStreamingTool('');
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: db ? [...db.messages, userMsg] : [userMsg] }),
         signal: controller.signal
       });
-      const data = await res.json();
-      if (data.messages) {
-        setDb(prev => prev ? { ...prev, messages: data.messages } : null);
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
+          try {
+            const event = JSON.parse(jsonStr);
+            if (event.type === 'chunk') {
+              setStreamingContent(prev => prev + event.text);
+            } else if (event.type === 'clear') {
+              setStreamingContent('');
+            } else if (event.type === 'tool_start') {
+              setStreamingPhase('tool');
+              setStreamingTool(event.tool);
+              setStreamingContent('');
+            } else if (event.type === 'tool_done') {
+              setStreamingPhase('streaming');
+            } else if (event.type === 'done') {
+              await fetchDb();
+            }
+          } catch (_) {}
+        }
       }
-      // Re-fetch to synchronize log outputs & memory lists
-      await fetchDb();
     } catch (err: any) {
-      if (err.name === 'AbortError') {
-        console.log('Chat generation was aborted by the user.');
-      } else {
-        console.error('Failed to post message', err);
+      if (err.name !== 'AbortError') {
+        console.error('Streaming chat failed', err);
       }
     } finally {
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
       }
+      setStreamingContent('');
+      setStreamingPhase(null);
+      setStreamingTool('');
       setChatSending(false);
     }
   };
@@ -1619,7 +1654,7 @@ export default function App() {
                                           ),
                                         }}
                                       >
-                                        {m.content || ''}
+                                        {m.role === 'model' ? stripToolCallBlocks(m.content || '') : (m.content || '')}
                                       </ReactMarkdown>
                                     </div>
                                     {/* Render intercepts */}
@@ -1636,6 +1671,48 @@ export default function App() {
                                   </div>
                                 </div>
                               ))
+                          )}
+                          {/* Streaming bubble */}
+                          {chatSending && (streamingContent || streamingPhase === 'tool') && (
+                            <div className="flex justify-start">
+                              <div className="max-w-[85%] rounded-lg rounded-tl-none px-3.5 py-2.5 shadow-md bg-[#201813] border border-[#2d231d] text-stone-200">
+                                <div className="flex items-center space-x-1 mb-1 text-[9px] font-mono opacity-50">
+                                  <span>ALICE</span>
+                                  <span>•</span>
+                                  <span className="animate-pulse text-amber-500">●</span>
+                                </div>
+                                {streamingPhase === 'tool' && (
+                                  <div className="text-[10px] font-mono text-amber-500 flex items-center gap-1.5 mb-1.5">
+                                    <span className="animate-spin inline-block">⚙</span>
+                                    <span>running <b>{streamingTool}</b>...</span>
+                                  </div>
+                                )}
+                                {streamingContent && (
+                                  <div className="markdown-body text-xs sm:text-[13px] leading-relaxed font-sans text-stone-200">
+                                    <ReactMarkdown
+                                      components={{
+                                        code({ node, className, children, ...props }) {
+                                          const match = /language-(\w+)/.exec(className || '');
+                                          const isInline = !match && !String(children).includes('\n');
+                                          return isInline ? (
+                                            <code className="px-1.5 py-0.5 bg-[#140f0c] text-amber-500 rounded font-mono text-xs border border-[#2d231d]/40" {...props}>{children}</code>
+                                          ) : (
+                                            <SyntaxHighlighter code={String(children).replace(/\n$/, '')} language={match ? match[1] : 'text'} />
+                                          );
+                                        },
+                                        p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed text-stone-200">{children}</p>,
+                                        ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-1 text-stone-300">{children}</ul>,
+                                        ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-1 text-stone-300">{children}</ol>,
+                                        li: ({ children }) => <li className="text-stone-300">{children}</li>,
+                                      }}
+                                    >
+                                      {stripToolCallBlocks(streamingContent)}
+                                    </ReactMarkdown>
+                                  </div>
+                                )}
+                                <span className="inline-block w-1.5 h-3.5 bg-amber-500 animate-pulse rounded-sm align-middle ml-0.5" />
+                              </div>
+                            </div>
                           )}
                           <div ref={chatBottomRef} />
                         </div>

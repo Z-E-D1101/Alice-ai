@@ -1,0 +1,163 @@
+{
+  "messages": [
+    {
+      "id": "init-msg",
+      "role": "system",
+      "content": "You are Hermes Personal AI Core, an advanced, self-improving personal assistant with 40 built-in utility tools.\nYou are running on a cheap cloud node. You remember conversations, build a profile of the user, and synthesize custom reusable skills.\nWhen the user asks you to perform operations that map to your tools, respond with a JSON block to call the tool.\nTo run a tool, you MUST return a valid JSON block inside your text (enclosed in markdown code blocks) like:\n```json\n{\n  \"toolCall\": {\n    \"name\": \"calculator\",\n    \"parameters\": {\n      \"expression\": \"25 * 4 + 10\"\n    }\n  }\n}\n```\nIf you want to store a memory about the user, use:\n```json\n{\n  \"toolCall\": {\n    \"name\": \"add_memory\",\n    \"parameters\": {\n      \"text\": \"User is a React developer specializing in dashboard layouts.\",\n      \"category\": \"professional\"\n    }\n  }\n}\n```\nDo not guess parameters, check the tool definitions. You can execute multiple tools sequentially if needed.",
+      "timestamp": "2026-06-28T09:06:23.272Z"
+    },
+    {
+      "id": "welcome-msg",
+      "role": "model",
+      "content": "Hello! I am **Hermes Core**, your self-improving, persistent personal assistant. \n\nI've booted my engine on your secure cloud node. I have **40 specialized tools** ready, long-term memory logging, and the ability to synthesize brand new skills. \n\nHow can I assist you today? Feel free to ask me to calculate equations, save notes, parse tech RSS, format code, or manage your checklist!",
+      "timestamp": "2026-06-28T09:06:23.272Z"
+    }
+  ],
+  "profile": {
+    "name": "Developer",
+    "bio": "An ambitious coder building autonomous agent networks on clean, efficient cloud containers.",
+    "profession": "Full-Stack Developer",
+    "interests": [
+      "autonomous AI",
+      "terminal interfaces",
+      "retro design systems",
+      "cloud containerization"
+    ],
+    "habits": [
+      "reviews system diagnostics hourly",
+      "logs tasks on scratchpads"
+    ],
+    "preferences": [
+      "prefers terminal slate high-contrast dark visual aesthetics",
+      "values objective, high-fidelity data responses"
+    ],
+    "lastUpdated": "2026-06-28T09:06:23.272Z"
+  },
+  "memories": [
+    {
+      "id": "mem-1",
+      "text": "Likes responsive, dark slate retro aesthetics and terminal fonts.",
+      "category": "preference",
+      "timestamp": "2026-06-28T09:06:23.272Z"
+    },
+    {
+      "id": "mem-2",
+      "text": "Spins up container pods on budget server runtimes.",
+      "category": "professional",
+      "timestamp": "2026-06-28T09:06:23.272Z"
+    }
+  ],
+  "skills": [
+    {
+      "id": "sk-1",
+      "name": "DailySummarizer",
+      "description": "Compiles activity checkmarks, tool logs, and note counts into a clean markdown dashboard.",
+      "triggerPrompt": "summarize core activity",
+      "systemPrompt": "Provide a clean, elegant summary of tasks completed, active diary notes, and diagnostics reports. Format with terminal spacing.",
+      "outputTemplate": "# HERMES DAILY ACTIVITY REPORT\n{payload}",
+      "createdAt": "2026-06-28T09:06:23.272Z"
+    }
+  ],
+  "schedules": [
+    {
+      "id": "sc-1",
+      "title": "Daily Digest Diagnostics & Tech RSS Report",
+      "description": "Fires up server diagnostics, retrieves top headlines from HackerNews, and outputs a brief dashboard update",
+      "cron": "interval_10_sec",
+      "enabled": true,
+      "taskPrompt": "Execute system_diagnostics and rss_reader, and compile a quick health digest.",
+      "outputChannel": "terminal",
+      "nextRun": "2026-06-28T09:06:33.272Z"
+    }
+  ],
+  "logs": [
+    {
+      "id": "log-seed-1",
+      "toolName": "system_diagnostics",
+      "timestamp": "2026-06-28T09:06:23.272Z",
+      "parameters": {},
+      "status": "success",
+      "result": "SYSTEM STATUS: Node server healthy. Memory allocated: 42MB. Uptime: 240s.",
+      "durationMs": 8
+    }
+  ],
+  "gateway": {
+    "telegramToken": "",
+    "telegramChatId": "",
+    "discordWebhookUrl": "",
+    "enabledChannels": {
+      "telegram": false,
+      "discord": false,
+      "terminal": true
+    }
+  },
+  "config": {
+    "provider": "gemini",
+    "modelName": "gemini-3.5-flash",
+    "customApiKey": ""
+  },
+  "notes": [
+    {
+      "id": "nt-seed-1",
+      "title": "Project Aethelgard Node Specs",
+      "content": "This personal core is configured to operate with 40 built-in system modules, an Express custom API, file-based persistence, and local simulated Webhook gateways to Telegram and Discord.",
+      "updatedAt": "2026-06-28T09:06:23.272Z"
+    }
+  ],
+  "todos": [
+    {
+      "id": "td-seed-1",
+      "text": "Test digital clock and global timezone viewer tools",
+      "completed": true,
+      "createdAt": "2026-06-28T09:06:23.272Z"
+    },
+    {
+      "id": "td-seed-2",
+      "text": "Link Telegram bot polling token to live webhook core",
+      "completed": false,
+      "createdAt": "2026-06-28T09:06:23.272Z"
+    }
+  ],
+  "learnings": [
+    {
+      "id": "learn-seed-1",
+      "type": "conversation",
+      "title": "User Preference Matching",
+      "description": "Learned that user prefers orange colors (#ea580c) and modern Swiss/sans-serif typography with cozy terminal widgets.",
+      "details": "Analyzed chat history on 2026-06-28. Synced the UI theme colors from corporate blue to orange-accented dark retro design.",
+      "timestamp": "2026-06-28T09:06:23.272Z",
+      "status": "learned"
+    },
+    {
+      "id": "learn-seed-2",
+      "type": "code_fix",
+      "title": "Syntax Highlighting Implementation",
+      "description": "Installed robust syntax-highlighting for code blocks inside ReactMarkdown renderer.",
+      "details": "Corrected rendering issue where JSON string blocks inside model chat windows lacked color-coded key-value pairs.",
+      "timestamp": "2026-06-28T09:06:23.272Z",
+      "status": "reinforced"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "session-default",
+      "title": "Default Conversation",
+      "createdAt": "2026-06-28T09:06:23.272Z",
+      "messages": [
+        {
+          "id": "init-msg",
+          "role": "system",
+          "content": "You are Hermes Personal AI Core, an advanced, self-improving personal assistant with 40 built-in utility tools.\nYou are running on a cheap cloud node. You remember conversations, build a profile of the user, and synthesize custom reusable skills.\nWhen the user asks you to perform operations that map to your tools, respond with a JSON block to call the tool.\nTo run a tool, you MUST return a valid JSON block inside your text (enclosed in markdown code blocks) like:\n```json\n{\n  \"toolCall\": {\n    \"name\": \"calculator\",\n    \"parameters\": {\n      \"expression\": \"25 * 4 + 10\"\n    }\n  }\n}\n```\nIf you want to store a memory about the user, use:\n```json\n{\n  \"toolCall\": {\n    \"name\": \"add_memory\",\n    \"parameters\": {\n      \"text\": \"User is a React developer specializing in dashboard layouts.\",\n      \"category\": \"professional\"\n    }\n  }\n}\n```\nDo not guess parameters, check the tool definitions. You can execute multiple tools sequentially if needed.",
+          "timestamp": "2026-06-28T09:06:23.272Z"
+        },
+        {
+          "id": "welcome-msg",
+          "role": "model",
+          "content": "Hello! I am **Hermes Core**, your self-improving, persistent personal assistant. \n\nI've booted my engine on your secure cloud node. I have **40 specialized tools** ready, long-term memory logging, and the ability to synthesize brand new skills. \n\nHow can I assist you today? Feel free to ask me to calculate equations, save notes, parse tech RSS, format code, or manage your checklist!",
+          "timestamp": "2026-06-28T09:06:23.272Z"
+        }
+      ]
+    }
+  ],
+  "activeSessionId": "session-default"
+}

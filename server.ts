@@ -1229,28 +1229,48 @@ Format strictly as JSON inside a markdown code block:
 
     const messagesHistory = db.messages
       .filter((m: any) => m.role === 'user' || m.role === 'model')
-      .slice(-12)
+      .slice(-60)
       .map((m: any) => ({ role: m.role === 'user' ? 'user' as const : 'model' as const, content: m.content }));
 
     const startOverall = Date.now();
-    const thinkingSteps: ThinkingStep[] = [{ id: 'step-init', icon: '⚙️', title: 'initializing Alice reasoning engine...', duration: '0.1s' }];
+    const thinkingSteps: ThinkingStep[] = [];
     const executedLogs: ToolCallLog[] = [];
     let responseText = '';
 
     const provider = db.config.provider;
     const geminiKey = process.env.GEMINI_API_KEY || db.config.customApiKey;
 
+    const addThinkingStep = (step: ThinkingStep) => {
+      thinkingSteps.push(step);
+      send({ type: 'thinking', steps: [...thinkingSteps] });
+    };
+
+    addThinkingStep({ id: 'step-init', icon: '⚙️', title: 'initializing Alice reasoning engine...', duration: '0.1s' });
+
     const streamGemini = async (instruction: string, contents: { role: 'user' | 'model'; content: string }[]) => {
       const ai = new GoogleGenAI({ apiKey: geminiKey!, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
       const chatContents = contents.map(m => ({ role: m.role, parts: [{ text: m.content }] }));
+      const model = db.config.modelName || 'gemini-2.5-flash';
       const stream = await ai.models.generateContentStream({
-        model: db.config.modelName || 'gemini-2.5-flash',
+        model,
         contents: chatContents,
-        config: { systemInstruction: instruction }
+        config: {
+          systemInstruction: instruction,
+          ...(model.includes('2.5') ? { thinkingConfig: { thinkingBudget: 8192, includeThoughts: true } } : {})
+        }
       });
       let full = '';
       for await (const chunk of stream) {
-        if (chunk.text) {
+        if (chunk.candidates?.[0]?.content?.parts) {
+          for (const part of chunk.candidates[0].content.parts as any[]) {
+            if (part.thought && part.text) {
+              send({ type: 'thinking_token', text: part.text });
+            } else if (part.text) {
+              full += part.text;
+              send({ type: 'chunk', text: part.text });
+            }
+          }
+        } else if (chunk.text) {
           full += chunk.text;
           send({ type: 'chunk', text: chunk.text });
         }

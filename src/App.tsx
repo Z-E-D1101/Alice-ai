@@ -368,6 +368,8 @@ export default function App() {
   const [streamingContent, setStreamingContent] = useState<string>('');
   const [streamingPhase, setStreamingPhase] = useState<'streaming' | 'tool' | null>(null);
   const [streamingTool, setStreamingTool] = useState<string>('');
+  const [streamingThinkingContent, setStreamingThinkingContent] = useState<string>('');
+  const [streamingThinkingSteps, setStreamingThinkingSteps] = useState<any[]>([]);
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -540,6 +542,8 @@ export default function App() {
     setStreamingContent('');
     setStreamingPhase('streaming');
     setStreamingTool('');
+    setStreamingThinkingContent('');
+    setStreamingThinkingSteps([]);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -570,6 +574,10 @@ export default function App() {
             const event = JSON.parse(jsonStr);
             if (event.type === 'chunk') {
               setStreamingContent(prev => prev + event.text);
+            } else if (event.type === 'thinking_token') {
+              setStreamingThinkingContent(prev => prev + event.text);
+            } else if (event.type === 'thinking') {
+              setStreamingThinkingSteps(event.steps || []);
             } else if (event.type === 'clear') {
               setStreamingContent('');
             } else if (event.type === 'tool_start') {
@@ -595,6 +603,8 @@ export default function App() {
       setStreamingContent('');
       setStreamingPhase(null);
       setStreamingTool('');
+      setStreamingThinkingContent('');
+      setStreamingThinkingSteps([]);
       setChatSending(false);
     }
   };
@@ -1476,6 +1486,16 @@ export default function App() {
                         </div>
                       </div>
 
+                      {/* Model Info Bar */}
+                      <div className="px-4 py-2 border-b border-[#2a2018] bg-[#0d0b09] flex items-center justify-between">
+                        <div className="flex items-center space-x-3 text-[11px] text-stone-500">
+                          <span className="font-mono">{aiProvider === 'gemini' ? 'Google Gemini' : aiProvider === 'openai' ? 'OpenAI' : aiProvider === 'openrouter' ? 'OpenRouter' : aiProvider}</span>
+                          <span className="text-stone-700">·</span>
+                          <span className="font-mono text-stone-400">{modelName || 'gemini-2.5-flash'}</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-stone-600 bg-[#161210] px-2 py-0.5 rounded-md border border-[#2a2018]">256K ctx</span>
+                      </div>
+
                       {/* Messages Body */}
                       <div className="flex-1 overflow-y-auto py-8 px-4 custom-scrollbar bg-[#0f0d0b]">
                         <div className="w-full max-w-2xl mx-auto space-y-5">
@@ -1575,24 +1595,36 @@ export default function App() {
                           {/* Streaming / Thinking bubble */}
                           {chatSending && (
                             <div className="flex justify-start">
-                              <div className="max-w-[85%] rounded-lg rounded-tl-none px-4 py-3 shadow-md bg-[#161210] border border-[#2a2018] text-stone-200">
-                                <div className="flex items-center space-x-1.5 mb-2 text-[10px] font-mono text-stone-500">
-                                  <span>Alice</span>
+                              <div className="w-full max-w-[90%] rounded-xl px-4 py-3.5 bg-[#0d0b09] border border-[#2a2018] text-stone-200">
+                                <div className="flex items-center space-x-1.5 mb-3 text-[11px] text-stone-500">
+                                  <span className="font-medium text-stone-400">Alice</span>
                                   <span className="animate-pulse text-[#ea580c]">●</span>
                                 </div>
+
+                                {/* Live thinking panel (DeepSeek style) */}
+                                {(streamingThinkingSteps.length > 0 || streamingThinkingContent) && (
+                                  <ThinkingStepsView
+                                    steps={streamingThinkingSteps}
+                                    isStreaming={true}
+                                    streamingContent={streamingThinkingContent}
+                                  />
+                                )}
+
                                 {streamingPhase === 'tool' && (
                                   <div className="text-[11px] font-mono text-amber-400 flex items-center gap-1.5 mb-2">
                                     <span className="animate-spin inline-block">⚙</span>
                                     <span>running <b>{streamingTool}</b>...</span>
                                   </div>
                                 )}
-                                {!streamingContent && streamingPhase !== 'tool' && (
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="w-1.5 h-1.5 bg-stone-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                    <span className="w-1.5 h-1.5 bg-stone-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                    <span className="w-1.5 h-1.5 bg-stone-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+
+                                {!streamingContent && !streamingThinkingContent && streamingPhase !== 'tool' && (
+                                  <div className="flex items-center gap-1.5 py-1">
+                                    <span className="w-1.5 h-1.5 bg-stone-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                    <span className="w-1.5 h-1.5 bg-stone-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                    <span className="w-1.5 h-1.5 bg-stone-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                                   </div>
                                 )}
+
                                 {streamingContent && (
                                   <div className="markdown-body text-xs sm:text-[13px] leading-relaxed font-sans text-stone-200">
                                     <ReactMarkdown
@@ -1601,7 +1633,7 @@ export default function App() {
                                           const match = /language-(\w+)/.exec(className || '');
                                           const isInline = !match && !String(children).includes('\n');
                                           return isInline ? (
-                                            <code className="px-1.5 py-0.5 bg-[#0f0d0b] text-amber-400 rounded font-mono text-xs border border-[#2d231d]/40" {...props}>{children}</code>
+                                            <code className="px-1.5 py-0.5 bg-[#0f0d0b] text-amber-400 rounded font-mono text-xs border border-[#2a2018]/60" {...props}>{children}</code>
                                           ) : (
                                             <SyntaxHighlighter code={String(children).replace(/\n$/, '')} language={match ? match[1] : 'text'} />
                                           );
@@ -1614,7 +1646,7 @@ export default function App() {
                                     >
                                       {stripToolCallBlocks(streamingContent)}
                                     </ReactMarkdown>
-                                    <span className="inline-block w-1.5 h-3.5 bg-[#ea580c] animate-pulse rounded-sm align-middle ml-0.5" />
+                                    <span className="inline-block w-1 h-3.5 bg-stone-400 animate-pulse rounded-sm align-middle ml-0.5" />
                                   </div>
                                 )}
                               </div>

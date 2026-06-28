@@ -1,0 +1,1 @@
+- [Alice stack](alice-stack.md) — file-based db.json persistence, no Supabase, long-term memory via add_memory tool injected into system prompt
